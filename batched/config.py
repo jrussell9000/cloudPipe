@@ -1,0 +1,14 @@
+aws_access_key_id: str = 'AKIAQMJTZW6JWUAVZ7K3'
+aws_secret_access_key: str = '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'
+aws_s3bucket: str = "brc-abcd"
+aws_region: str = "us-east-1"
+batch_size: int = 10
+nda_username: str = 'jrusse10'
+nda_password: str = '19Ireland61'
+miNDAR_packageID: str = '1228348'
+miNDAR_password: str = 'Stella91'
+miNDAR_username: str = "_".join([nda_username, miNDAR_packageID])
+miNDAR_host = "mindarvpc.cqahbwk3l1mb.us-east-1.rds.amazonaws.com"
+miNDAR_tablename = "fmriresults01"
+trackingdb_tablename = "FastBatchTracking"
+nThreads: str = "1"

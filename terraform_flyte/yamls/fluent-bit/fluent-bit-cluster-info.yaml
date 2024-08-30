@@ -1,0 +1,19 @@
+# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+#
+apiVersion: v1
+data:
+  cluster.name: batch-eks
+  http.port: ""
+  http.server: ""
+  logs.region: us-east-1
+  read.head: "Off"
+  read.tail: ""
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2024-06-21T19:58:47Z"
+  name: fluent-bit-cluster-info
+  namespace: amazon-cloudwatch
+  resourceVersion: "440615"
+  uid: a11e3e41-a316-4a1c-8cfa-9e1d5c3ab625

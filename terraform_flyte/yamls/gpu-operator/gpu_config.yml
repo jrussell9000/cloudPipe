@@ -1,0 +1,11 @@
+--2024-08-04 19:24:22--  https://raw.githubusercontent.com/NVIDIA/gpu-operator/main/deployments/gpu-operator/values.yaml
+Resolving raw.githubusercontent.com (raw.githubusercontent.com)... 185.199.109.133, 185.199.108.133, 185.199.111.133, ...
+Connecting to raw.githubusercontent.com (raw.githubusercontent.com)|185.199.109.133|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 16371 (16K) [text/plain]
+Saving to: ‘values.yaml’
+
+     0K .......... .....                                      100% 15.2M=0.001s
+
+2024-08-04 19:24:23 (15.2 MB/s) - ‘values.yaml’ saved [16371/16371]
+

@@ -1,0 +1,62 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow                  # new type of k8s spec
+metadata:
+  generateName: abcd-fmriprep-pipeline-    # name of the workflow spec
+  namespace: argo-workflows
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::026415314835:role/argo-s3-access-role
+spec:
+  arguments:
+    parameters:
+    - name: subjsesid
+      value: helloworld
+  serviceAccountName: argo-workflows-controller-sa
+  entrypoint: fullABCDfmriPrepPipeline 
+  templates:
+  - name: fullABCDfmriPrepPipeline
+    steps:
+    - - name: pull-anatomical-images
+        template: pull-image
+        arguments:
+          parameters:
+          - name: subjsesid
+            value: "{{workflow.parameters.subjsesid}}"
+    - - name: run-fastsurfer-segmentation
+        template: fastsurfer-segmentation
+        arguments:
+          artifacts:
+          - name: T1image
+            from: "{{steps.pull-anatomical-images.outputs.artifacts.T1image}}"
+
+  - name: pull-image        # name of the template
+    inputs:
+      parameters:
+      - name: subjsesid
+    container:
+      imagePullPolicy: "IfNotPresent"
+      image: jrussell9000/ndadownloader:latest
+      command: ["/home/nonroot/work/entrypoint.sh", "/home/nonroot/work/ndaDownload.py"]
+      args: ["{{inputs.parameters.subjsesid}}"]
+    outputs:
+      artifacts:
+        - name: T1image
+          path: /home/nonroot/work/sub-NDARINV00LH735Y_ses-baselineYear1Arm1_run-01_T1w.nii
+          s3:
+            key: sub-NDARINV00LH735Y_ses-baselineYear1Arm1_T1w.nii
+          # Disabling TGZ compression
+          archive:
+            none: {}
+
+
+  - name: fastsurfer-segmentation
+    container:
+      imagePullPolicy: "IfNotPresent"
+      image: deepmi/fastsurfer:latest
+      command: ["/fastsurfer/Docker/entrypoint.sh","/fastsurfer/run_fastsurfer.sh"]
+      args: ["--allow_root", "--t1", "/tmp/T1image", "--sid", "test", "--sd", "/work"]
+    inputs:
+      artifacts:
+        - name: T1image
+          path: /tmp/sub-NDARINV00LH735Y_ses-baselineYear1Arm1_run-01_T1w.nii
+
+

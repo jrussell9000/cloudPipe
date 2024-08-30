@@ -1,0 +1,195 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow                  # new type of k8s spec
+metadata:
+  generateName: abcd-fmriprep-pipeline-    # name of the workflow spec
+  namespace: argo-workflows
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::026415314835:role/argo-s3-access-role
+spec:
+  # RBAC account which will run the workflow
+  serviceAccountName: argo-workflows-controller-sa
+  # Starting template
+  entrypoint: fullABCDfmriPrepPipeline
+  # Arguments passed at the command line ('-p arg=')
+  arguments:
+    parameters:
+    - name: rawsubjsesid
+      value: helloworld
+
+  templates:
+
+  # Main DAG template
+  - name: fullABCDfmriPrepPipeline
+    dag:
+      # Providing each task in the DAG, its dependencies, and its inputs
+      tasks:
+
+        - name: get-fs-license
+          template: get-freesurfer-license
+
+        # BIDS-formatting the raw subject-ses string
+        - name: format-rawsubjses
+          template: bids-format-rawsubjses
+          # Inputs to DAG templates use the arguments format
+          arguments:
+            parameters:
+              # From spec>arguments>parameters - passed by CLI
+              - name: rawsubjsesid
+                # This is the correct call for this value (doesn't match the local schema)
+                value: '{{workflow.parameters.rawsubjsesid}}'
+
+        # Getting the anatomical(s) from NDA/S3
+        - name: pull-anatomical-images
+          template: pull-anat-image
+          # Need a BIDS-formatted ID
+          dependencies:
+            - format-rawsubjses
+          # Inputs to DAG templates use the arguments format
+          arguments:
+            parameters:
+            # From spec>arguments>parameters - passed by CLI
+            - name: rawsubjsesid
+              value: '{{workflow.parameters.rawsubjsesid}}'
+            # Using the output of format-rawsubjses (BIDS-formatted ID) as input
+            - name: subjsesid
+              value: '{{tasks.format-rawsubjses.outputs.result}}'
+
+
+        - name: run-fastsurfer-segmentation
+          template: fastsurfer-segmentation
+          # Need anatomical(s) to process
+          dependencies: 
+            - pull-anatomical-images
+          # Inputs to DAG templates use the arguments format
+          arguments:
+            # Using output of pull-anatomical-images as input
+            artifacts:
+            - name: T1image
+              from: '{{tasks.pull-anatomical-images.outputs.artifacts.T1image}}'
+            # Using the output of format-rawsubjses (BIDS-formatted ID) as input
+            parameters:
+            - name: subjsesid
+              value: '{{tasks.format-rawsubjses.outputs.result}}'
+
+        - name: run-fastsurfer-parcellation
+          template: fastsurfer-parcellation
+          dependencies:
+            - get-fs-license
+            - run-fastsurfer-segmentation
+          # Inputs to DAG templates use the arguments format
+          arguments:
+            # Using output of run-fastsurfer-segmentation as input
+            artifacts:
+            - name: segmentedOutput
+              from: '{{tasks.run-fastsurfer-segmentation.outputs.artifacts.seg_output}}'
+            - name: fslicense
+              from: '{{tasks.get-fs-license.outputs.artifacts.fslicense}}'
+            # Using the output of format-rawsubjses (BIDS-formatted ID) as input
+            parameters:
+            - name: subjsesid
+              value: '{{tasks.format-rawsubjses.outputs.result}}'
+
+
+  #################################
+  # Individual DAG task templates #
+  #################################
+
+  # Python script-template to BIDS-format the raw subject_ses ID and return it
+  - name: bids-format-rawsubjses
+    inputs:
+      parameters:
+        - name: rawsubjsesid
+    script:
+      image: python:alpine3.19
+      command: [python]
+      # Script templates automagically assigns stdout to outputs.result (hence the print command)
+      # https://argo-workflows.readthedocs.io/en/latest/walk-through/scripts-and-results/
+      source: |
+        subjses = str("{{inputs.parameters.rawsubjsesid}}").replace("_", "_ses-")
+        subjses = "-".join(["sub", subjses])
+        print(subjses)
+
+  # Downloading a freesurfer license file from our S3 bucket
+  - name: get-freesurfer-license
+    inputs:
+      artifacts:
+      - name: fslicense
+        path: /.license
+        s3:
+          key: config/fslicense
+    container:
+      image: debian:latest
+      command: [sh, -c]
+      args: ["ls -l /.license"]
+    outputs:
+      artifacts:
+      - name: fslicense
+        path: /.license
+        archive:
+          none: {}
+
+
+  # Container image that downloads files from NDA/S3
+  - name: pull-anat-image
+    inputs:
+      parameters:
+      - name: rawsubjsesid
+      - name: subjsesid
+    container:
+      imagePullPolicy: "IfNotPresent"
+      image: jrussell9000/ndadownloader:latest
+      command: ["/home/nonroot/work/entrypoint.sh", "/home/nonroot/work/ndaDownload.py"]
+      args: ["{{inputs.parameters.rawsubjsesid}}"]
+    outputs:
+      artifacts:
+        - name: T1image
+          path: '/home/nonroot/work/{{inputs.parameters.subjsesid}}_run-01_T1w.nii'
+          s3:
+            key: '{{inputs.parameters.subjsesid}}_run-01_T1w.nii'
+          # Disabling TGZ compression
+          archive:
+            none: {}
+
+  - name: fastsurfer-segmentation
+    container:
+      imagePullPolicy: "IfNotPresent"
+      image: deepmi/fastsurfer:latest
+      # Argo requires specification of command, even if its already defined in the image
+      command: ["/fastsurfer/Docker/entrypoint.sh","/fastsurfer/run_fastsurfer.sh"]
+      # ex. Last line of https://github.com/argoproj/argo-workflows/blob/main/examples/artifact-path-placeholders.yaml
+      args: [--allow_root, --t1, "{{inputs.artifacts.T1image.path}}", --sid, "{{inputs.parameters.subjsesid}}", --sd, /work, --seg_only, --parallel, --3T, --threads, '4', --no_cereb, --no_biasfield]
+    inputs:
+      artifacts:
+        - name: T1image
+          path: /tmp/{{inputs.parameters.subjsesid}}_run-01_T1w.nii
+      parameters:
+        - name: subjsesid
+    outputs:
+      artifacts:
+        - name: seg_output
+          path: /work/{{inputs.parameters.subjsesid}}/
+          s3:
+            key: '{{inputs.parameters.subjsesid}}'
+
+  - name: fastsurfer-parcellation
+    container:
+      imagePullPolicy: "IfNotPresent"
+      image: deepmi/fastsurfer:latest
+      # Argo requires specification of command, even if its already defined in the image
+      command: ["/fastsurfer/Docker/entrypoint.sh","/fastsurfer/run_fastsurfer.sh"]
+      # ex. Last line of https://github.com/argoproj/argo-workflows/blob/main/examples/artifact-path-placeholders.yaml
+      args: [--allow_root, --sid, "{{inputs.parameters.subjsesid}}", --sd, "/work", --surf_only, --parallel, --3T, --threads, '4']
+    inputs:
+      artifacts:
+        - name: segmentedOutput
+          path: /work/{{inputs.parameters.subjsesid}}
+        - name: fslicense
+          path: /opt/freesurfer/.license
+      parameters:
+        - name: subjsesid
+    outputs:
+      artifacts:
+        - name: parc_output
+          path: /work
+
+
