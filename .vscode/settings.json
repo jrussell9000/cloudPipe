@@ -1,0 +1,6 @@
+{
+    "yaml.schemas": {
+        "https://raw.githubusercontent.com/argoproj/argo-workflows/main/api/jsonschema/schema.json": "argo/*.yaml",
+        "https://json.schemastore.org/github-workflow.json": "file:///home/jdrussell3/fastProc/batched/deploy.yml"
+    }
+}

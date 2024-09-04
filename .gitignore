@@ -34,3 +34,4 @@ override.tf.json
 terraform.rc
 
 *.cfg
+kubecon-2024-eu-argocon/

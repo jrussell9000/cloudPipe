@@ -1,0 +1,3 @@
+[submodule "modules/ndaDownloader"]
+	path = modules/ndaDownloader
+	url = https://github.com/jrussell9000/ndaDownloader
