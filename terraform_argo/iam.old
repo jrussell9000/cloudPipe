@@ -1,6 +1,3 @@
-################################################################################
-# Argo-Workflows
-################################################################################
 # Argo Workflows Server IAM Policy
 # https://github.com/open-metadata/openmetadata-deployment/blob/main/terraform/aws/argowf_irsa.tf
 data "aws_iam_policy_document" "argowf_server" {

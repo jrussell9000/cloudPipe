@@ -138,7 +138,10 @@ module "eks_blueprints_addons" {
   karpenter_node = {
     iam_role_use_name_prefix = false
     iam_role_additional_policies = {
-      AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      AmazonSSMManagedInstanceCore             = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      AmazonEKSWorkerNodePolicy                = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+      AmazonEC2ContainerRegistryReadOnlyPolicy = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+      AmazonEKSCNIPolicy                       = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
     }
   }
   karpenter = {
@@ -191,8 +194,8 @@ module "eks_blueprints_addons" {
 
 # Resource: Helm Release 
 resource "helm_release" "argo_workflow_release" {
-  depends_on = [module.irsa_role_argowf_server,
-  module.irsa_role_argowf_controller]
+  depends_on = [module.argo_workflows_server_irsa_aws,
+  module.argo_workflows_controller_irsa_aws]
   name             = lower(local.name)
   repository       = "https://argoproj.github.io/argo-helm"
   chart            = "argo-workflows"

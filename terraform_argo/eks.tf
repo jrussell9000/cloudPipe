@@ -10,16 +10,16 @@ module "eks" {
   cluster_version = var.cluster_version
 
   # This appears to be required (for now) to get Helm to recognize the K8s cluster
-  cluster_endpoint_public_access = true
+  cluster_endpoint_public_access  = true
   cluster_endpoint_private_access = true
 
-  vpc_id     = module.vpc.vpc_id
-  
+  vpc_id = module.vpc.vpc_id
+
   subnet_ids = module.vpc.private_subnets
 
-  create_cloudwatch_log_group = false
+  create_cloudwatch_log_group   = false
   create_cluster_security_group = false
-  create_node_security_group = false
+  create_node_security_group    = false
 
 
 
@@ -36,10 +36,10 @@ module "eks" {
       principal_arn     = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/NetIDAdministratorAccess"
 
       policy_associations = {
-        clusteradmin= {
+        clusteradmin = {
           policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
           access_scope = {
-            type       = "cluster"
+            type = "cluster"
           }
         }
       }
@@ -50,7 +50,6 @@ module "eks" {
     iam_role_additional_policies = {
       # Not required, but used in the example to access the nodes to inspect mounted volumes
       AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-      ArgoS3IRSAIamPolicy = aws_iam_policy.argo_s3_irsa_iam_policy.arn
     }
     ebs_optimized = true
     # This block device is used only for the root volume. Adjust volume according to your size.
@@ -79,26 +78,56 @@ module "eks" {
       max_size       = 10
       desired_size   = 1
       # Untouched AL2 Accelerated EKS Optimized Image w 30GB root storage
-      ami_id = "ami-09fcc208f4f6394d4"
+      ami_id   = "ami-09fcc208f4f6394d4"
       ami_type = "CUSTOM"
       # Run post-creation setup processes - required for non-AL (custom) instances
       enable_bootstrap_user_data = true
       # bootstrap_extra_args = "--container-runtime nvidia-container-runtime"
     }
   }
+
+  fargate_profiles = {
+    karpenter = {
+      selectors = [
+        { namespace = "karpenter" }
+      ]
+    }
+    kube_system = {
+      name = "kube-system"
+      selectors = [
+        { namespace = "kube-system" }
+      ]
+    }
+    argo = {
+      name = "argo"
+      selectors = [
+        { namespace = "argo*",
+          labels = {
+            "app.kubernetes.io/managed-by" = "Helm"
+          }
+        }
+      ]
+    }
+  }
+  tags = merge(local.tags, {
+    # NOTE - if creating multiple security groups with this module, only tag the
+    # security group that Karpenter should utilize with the following tag
+    # (i.e. - at most, only one security group should have this tag in your account)
+    "karpenter.sh/discovery" = local.name
+  })
 }
 
-# module "aws-auth" {
-#   source  = "terraform-aws-modules/eks/aws//modules/aws-auth"
-#   version = "~> 20.0"
+module "aws-auth" {
+  source  = "terraform-aws-modules/eks/aws//modules/aws-auth"
+  version = "~> 20.0"
 
-#   manage_aws_auth_configmap = true
+  manage_aws_auth_configmap = true
 
-#   aws_auth_roles = [
-#     {
-#       rolearn  = module.eks_blueprints_addons.karpenter.node_iam_role_arn
-#       username = "system:node:{{EC2PrivateDNSName}}"
-#       groups   = ["system:bootstrappers", "system:nodes"]
-#     },
-#   ]
-# }
+  aws_auth_roles = [
+    {
+      rolearn  = module.eks_blueprints_addons.karpenter.node_iam_role_arn
+      username = "system:node:{{EC2PrivateDNSName}}"
+      groups   = ["system:bootstrappers", "system:nodes"]
+    },
+  ]
+}
