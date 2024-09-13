@@ -19,8 +19,8 @@ variable "ssh_key" {
 *****************/
 
 variable "vpc_name" {
-  type = string
-  default = "batch-eks-vpc"
+  type        = string
+  default     = "batch-eks-vpc"
   description = "Name for the VPC supporting Batch on EKS"
 }
 
@@ -72,7 +72,7 @@ variable "cluster_name" {
 
 variable "name" {
   default = "batch-eks"
-  type = string
+  type    = string
 }
 
 variable "cluster_version" {
@@ -91,12 +91,12 @@ variable "additional_user_data" {
 * GPU Operator Variables *
 **********************************/
 variable "gpu_operator_version" {
-  default = "24.6.0"
+  default     = "24.6.0"
   description = "Version of the GPU Operator plugin"
 }
 
 variable "gpu_operator_namespace" {
-  default = "gpu-operator"
+  default     = "gpu-operator"
   description = "K8s namespace of the GPU Operator plugin"
 }
 
@@ -109,7 +109,7 @@ variable "gpu_operator_namespace" {
 ******************************************/
 variable "eksControl_gpu_nodePool_instance_types" {
   type        = list(string)
-  default = ["g3s.xlarge"]
+  default     = ["g3s.xlarge"]
   description = "GPU EC2 worker node instance type"
 }
 
@@ -142,16 +142,16 @@ variable "eksControl_desired_gpu_nodes" {
 
 
 variable "argowf_namespace" {
-  type = string
+  type    = string
   default = "argo-workflows"
 }
 
 variable "argowf_server_serviceaccount" {
-  type = string
+  type    = string
   default = "argo-workflows-server-sa"
 }
 
 variable "argowf_controller_serviceaccount" {
-  type = string
+  type    = string
   default = "argo-workflows-controller-sa"
 }

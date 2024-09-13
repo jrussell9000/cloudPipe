@@ -6,6 +6,9 @@ daemonsets:
   - key: "nvidia.com/gpu"
     operator: "Exists"
     effect: "NoSchedule"
+  - key:     "karpenter.sh/controller"
+    value:   "true"
+    effect:  "NO_SCHEDULE"
 
 node-feature-discovery:
   worker:
@@ -23,3 +26,6 @@ node-feature-discovery:
       effect: NoSchedule
     - key: "batch.amazonaws.com/batch-node"
       operator: "Exists"
+    - key:     "karpenter.sh/controller"
+      value:   "true"
+      effect:  "NO_SCHEDULE"

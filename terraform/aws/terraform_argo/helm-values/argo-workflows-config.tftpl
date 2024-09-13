@@ -10,6 +10,13 @@ server:
   serviceType: LoadBalancer
   extraArgs:
     - "--auth-mode=server"
+  tolerations:
+  - key: "CriticalAddonsOnly"
+    value: "true"
+    effect: "NoSchedule"
+
+
+
 
 useStaticCredentials: false
 artifactRepository:
@@ -29,6 +36,12 @@ controller:
     annotations:
       eks.amazonaws.com/role-arn: ${ controllerIAMarn }
   name: ""
+  tolerations: 
+  - key: "CriticalAddonsOnly"
+    value: "true"
+    effect: "NoSchedule"
+
+
 
 workflowNamespaces:
   - "argo-workflows"

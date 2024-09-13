@@ -14,22 +14,23 @@ spec:
   arguments:
     parameters:
     - name: rawsubjsesid
-      value: helloworld
+    - name: miNDARpkgID
 
   templates:
 
-  # Main DAG template
+  #####################
+  # MAIN PIPELINE DAG #
+  #####################
   - name: fullABCDfmriPrepPipeline
     dag:
       # Providing each task in the DAG, its dependencies, and its inputs
       tasks:
+      
 
-        - name: get-fs-license
-          template: get-freesurfer-license
 
         # BIDS-formatting the raw subject-ses string
-        - name: format-rawsubjses
-          template: bids-format-rawsubjses
+        - name: bids-format-rawsubjses
+          template: bids-format-rawsubjses-tmpl
           # Inputs to DAG templates use the arguments format
           arguments:
             parameters:
@@ -38,56 +39,87 @@ spec:
                 # This is the correct call for this value (doesn't match the local schema)
                 value: '{{workflow.parameters.rawsubjsesid}}'
 
+        # Extracting the BIDS-format subject ID (e.g., sub-XXXX)
+        - name: get-bids-subjid
+          template: get-bids-subjid-tmpl
+          dependencies:
+            - bids-format-rawsubjses
+          arguments:
+            parameters:
+              - name: subjsesid
+                value: '{{tasks.bids-format-rawsubjses.outputs.result}}'
+        
+        # Extracting the BIDS-format session (e.g., ses-YYYY)
+        - name: get-bids-ses
+          template: get-bids-ses-tmpl
+          dependencies:
+            - bids-format-rawsubjses
+          arguments:
+            parameters:
+              - name: subjsesid
+                value: '{{tasks.bids-format-rawsubjses.outputs.result}}'
+
+        - name: get-freesurfer-license
+          template: get-freesurfer-license-tmpl
+
         # Getting the anatomical(s) from NDA/S3
-        - name: pull-anatomical-images
-          template: pull-anat-image
+        - name: NDA-Download
+          template: NDA-Download-tmpl
           # Need a BIDS-formatted ID
           dependencies:
-            - format-rawsubjses
+            - bids-format-rawsubjses
+            - get-bids-subjid
+            - get-bids-ses
           # Inputs to DAG templates use the arguments format
           arguments:
             parameters:
             # From spec>arguments>parameters - passed by CLI
             - name: rawsubjsesid
               value: '{{workflow.parameters.rawsubjsesid}}'
-            # Using the output of format-rawsubjses (BIDS-formatted ID) as input
+            # Passing the BIDS subjsesid as an input so we can use it to name the output
             - name: subjsesid
-              value: '{{tasks.format-rawsubjses.outputs.result}}'
+              value: '{{tasks.bids-format-rawsubjses.outputs.result}}'
+            - name: miNDARpkgID
+              value: '{{workflow.parameters.miNDARpkgID}}'
+            - name: subjid
+              value: '{{tasks.get-bids-subjid.outputs.result}}'
+            - name: ses
+              value: '{{tasks.get-bids-ses.outputs.result}}'
 
 
-        - name: run-fastsurfer-segmentation
-          template: fastsurfer-segmentation
+        - name: Segmentation
+          template: Segmentation-tmpl
           # Need anatomical(s) to process
           dependencies: 
-            - pull-anatomical-images
+            - NDA-Download
           # Inputs to DAG templates use the arguments format
           arguments:
-            # Using output of pull-anatomical-images as input
+            # Using output of NDA-Download as input
             artifacts:
-            - name: T1image
-              from: '{{tasks.pull-anatomical-images.outputs.artifacts.T1image}}'
+            - name: T1w
+              from: '{{tasks.NDA-Download.outputs.artifacts.T1w}}'
             # Using the output of format-rawsubjses (BIDS-formatted ID) as input
             parameters:
             - name: subjsesid
-              value: '{{tasks.format-rawsubjses.outputs.result}}'
+              value: '{{tasks.bids-format-rawsubjses.outputs.result}}'
 
-        - name: run-fastsurfer-parcellation
-          template: fastsurfer-parcellation
+        - name: Parcellation
+          template: Parcellation-tmpl
           dependencies:
-            - get-fs-license
-            - run-fastsurfer-segmentation
+            - get-freesurfer-license
+            - Segmentation
           # Inputs to DAG templates use the arguments format
           arguments:
-            # Using output of run-fastsurfer-segmentation as input
+            # Using output of Segmentation as input
             artifacts:
             - name: segmentedOutput
-              from: '{{tasks.run-fastsurfer-segmentation.outputs.artifacts.seg_output}}'
+              from: '{{tasks.Segmentation.outputs.artifacts.seg_output}}'
             - name: fslicense
-              from: '{{tasks.get-fs-license.outputs.artifacts.fslicense}}'
+              from: '{{tasks.get-freesurfer-license.outputs.artifacts.fslicense}}'
             # Using the output of format-rawsubjses (BIDS-formatted ID) as input
             parameters:
             - name: subjsesid
-              value: '{{tasks.format-rawsubjses.outputs.result}}'
+              value: '{{tasks.bids-format-rawsubjses.outputs.result}}'
 
 
   #################################
@@ -95,7 +127,7 @@ spec:
   #################################
 
   # Python script-template to BIDS-format the raw subject_ses ID and return it
-  - name: bids-format-rawsubjses
+  - name: bids-format-rawsubjses-tmpl
     inputs:
       parameters:
         - name: rawsubjsesid
@@ -109,8 +141,30 @@ spec:
         subjses = "-".join(["sub", subjses])
         print(subjses)
 
+  - name: get-bids-subjid-tmpl
+    inputs:
+      parameters: 
+        - name: subjsesid
+    script:
+      image: python:alpine3.19
+      command: [python]
+      source: |
+        subjid = str("{{ inputs.parameters.subjsesid }}").split("_")[0]
+        print(subjid)
+
+  - name: get-bids-ses-tmpl
+    inputs:
+      parameters:
+        - name: subjsesid
+    script:
+      image: python:alpine3.19
+      command: [python]
+      source: |
+        ses = str("{{ inputs.parameters.subjsesid }}").split("_")[1]
+        print(ses)
+
   # Downloading a freesurfer license file from our S3 bucket
-  - name: get-freesurfer-license
+  - name: get-freesurfer-license-tmpl
     inputs:
       artifacts:
       - name: fslicense
@@ -128,39 +182,208 @@ spec:
         archive:
           none: {}
 
-
-  # Container image that downloads files from NDA/S3
-  - name: pull-anat-image
+  # Container image that downloads files from NDA's S3 storage
+  - name: NDA-Download-tmpl
     inputs:
       parameters:
+      # Raw (non-BIDS format) subjectID_session string (e.g., NDARINV00XXXXX_baselineYear1Arm1)
       - name: rawsubjsesid
+      # BIDS-format subject_session string (e.g., sub-NDARINV00XXXXXX_baselineYear1Arm1)
       - name: subjsesid
+      # miNDAR package ID number 
+      - name: miNDARpkgID
+      # BIDS-format subject ID (e.g., sub-NDARINV00XXXXXX)
+      - name: subjid
+      # BIDS-format session (e.g., ses-baselineYear1Arm1)
+      - name: ses
+
     container:
-      imagePullPolicy: "IfNotPresent"
-      image: jrussell9000/ndadownloader:latest
+      imagePullPolicy: "Always"
+      image: jrussell9000/nda-downloader:latest
+      # Argo makes us respecify the command (entrypoint) even if its already defined in the image
       command: ["/home/nonroot/work/entrypoint.sh", "/home/nonroot/work/ndaDownload.py"]
-      args: ["{{inputs.parameters.rawsubjsesid}}"]
+      # Arguments passed to the ndaDownloader container
+      args: [-s, "{{inputs.parameters.rawsubjsesid}}", -m, "{{inputs.parameters.miNDARpkgID}}", -u, "jrusse10", -p, "19Ireland61"]
     outputs:
+      # Scans downloaded by ndaDownloader that we'll save in our artifact repository
       artifacts:
-        - name: T1image
-          path: '/home/nonroot/work/{{inputs.parameters.subjsesid}}_run-01_T1w.nii'
+        # T1w (required)
+        - name: T1w
+          # Container path to the scan file
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/anat/{{inputs.parameters.subjsesid}}_run-01_T1w.nii'
+          # S3 key where we'll store this file
           s3:
-            key: '{{inputs.parameters.subjsesid}}_run-01_T1w.nii'
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/anat/{{inputs.parameters.subjsesid}}_run-01_T1w.nii'
           # Disabling TGZ compression
           archive:
             none: {}
-
-  - name: fastsurfer-segmentation
+        # T2w
+        - name: T2w
+          # Do not fail the DAG if this scan is not available
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/anat/{{inputs.parameters.subjsesid}}_run-01_T2w.nii'
+          # Saving the artifact to S3 for use in future steps
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/anat/{{inputs.parameters.subjsesid}}_run-01_T2w.nii'
+          # Don't compress the scan file before copying it to S3 (uses more temporary storage, but saves time)
+          archive:
+            none: {}
+        # nBack
+        ## Run 1
+        ### Scan
+        - name: nBack-run-1
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-01_bold.nii'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-01_bold.nii'
+          archive:
+            none: {}
+        ### Motion
+        - name: nBack-run-1-motion
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-01_motion.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-01_motion.tsv'
+          archive:
+            none: {}
+        ### Events
+        - name: nBack-run-1-events
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-01_events.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-01_events.tsv'
+          archive:
+            none: {}
+        ### Run 2
+        - name: nBack-run-2
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-02_bold.nii'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-02_bold.nii'
+          archive:
+            none: {}
+        - name: nBack-run-2-motion
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-02_motion.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-02_motion.tsv'
+          archive:
+            none: {}
+        - name: nBack-run-2-events
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-02_events.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-02_events.tsv'
+          archive:
+            none: {}
+        ## Run 3
+        - name: nBack-run-3
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-03_bold.nii'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-03_bold.nii'
+          archive:
+            none: {}
+        - name: nBack-run-3-motion
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-03_motion.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-03_motion.tsv'
+          archive:
+            none: {}
+        - name: nBack-run-3-events
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-03_events.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-03_events.tsv'
+          archive:
+            none: {}
+        ## Run 4
+        - name: nBack-run-4
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-04_bold.nii'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-04_bold.nii'
+          archive:
+            none: {}
+        - name: nBack-run-4-motion
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-04_motion.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-04_motion.tsv'
+          archive:
+            none: {}
+        - name: nBack-run-4-events
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-04_events.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-nback_run-04_events.tsv'
+          archive:
+            none: {}
+        # Resting State
+        ## Run 1
+        - name: rest-run-1
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-01_bold.nii'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-01_bold.nii'
+          archive:
+            none: {}
+        - name: rest-run-1-motion
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-01_motion.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-01_motion.tsv'
+          archive:
+            none: {}
+        ## Run 2 (required)
+        - name: rest-run-2
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-02_bold.nii'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-02_bold.nii'
+          archive:
+            none: {}
+        - name: rest-run-2-motion
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-02_motion.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-02_motion.tsv'
+          archive:
+            none: {}
+        ## Run 3
+        - name: rest-run-3
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-03_bold.nii'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-03_bold.nii'
+          archive:
+            none: {}
+        - name: rest-run-3-motion
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-03_motion.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-03_motion.tsv'
+          archive:
+            none: {}
+        ## Run 4
+        - name: rest-run-4
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-04_bold.nii'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-04_bold.nii'
+          archive:
+            none: {}
+        - name: rest-run-4-motion
+          optional: true
+          path: '/home/nonroot/work/{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-04_motion.tsv'
+          s3:
+            key: '{{inputs.parameters.subjid}}/{{inputs.parameters.ses}}/func/{{inputs.parameters.subjsesid}}_task-rest_run-04_motion.tsv'
+          archive:
+            none: {}
+    
+  - name: Segmentation-tmpl
     container:
       imagePullPolicy: "IfNotPresent"
       image: deepmi/fastsurfer:latest
-      # Argo requires specification of command, even if its already defined in the image
+      securityContext:
+        runAsUser: 0 # Containerd crashes if this isn't set, even though root is the default (?)    
       command: ["/fastsurfer/Docker/entrypoint.sh","/fastsurfer/run_fastsurfer.sh"]
       # ex. Last line of https://github.com/argoproj/argo-workflows/blob/main/examples/artifact-path-placeholders.yaml
-      args: [--allow_root, --t1, "{{inputs.artifacts.T1image.path}}", --sid, "{{inputs.parameters.subjsesid}}", --sd, /work, --seg_only, --parallel, --3T, --threads, '4', --no_cereb, --no_biasfield]
+      args: [--allow_root, --t1, "{{inputs.artifacts.T1w.path}}", --sid, "{{inputs.parameters.subjsesid}}", --sd, /work, --seg_only, --parallel, --3T, --threads, '4', --no_cereb, --no_biasfield]
     inputs:
       artifacts:
-        - name: T1image
+        - name: T1w
           path: /tmp/{{inputs.parameters.subjsesid}}_run-01_T1w.nii
       parameters:
         - name: subjsesid
@@ -169,16 +392,18 @@ spec:
         - name: seg_output
           path: /work/{{inputs.parameters.subjsesid}}/
           s3:
-            key: '{{inputs.parameters.subjsesid}}'
+            key: 'derivatives/fastsurfer/{{inputs.parameters.subjsesid}}'
 
-  - name: fastsurfer-parcellation
+  - name: Parcellation-tmpl
     container:
       imagePullPolicy: "IfNotPresent"
       image: deepmi/fastsurfer:latest
-      # Argo requires specification of command, even if its already defined in the image
+      securityContext:
+        runAsUser: 0 # Containerd crashes if this isn't set, even though root is the default(?)
+      # Argo requires us to specify the command (entrypoint), even if its already defined in the image
       command: ["/fastsurfer/Docker/entrypoint.sh","/fastsurfer/run_fastsurfer.sh"]
       # ex. Last line of https://github.com/argoproj/argo-workflows/blob/main/examples/artifact-path-placeholders.yaml
-      args: [--allow_root, --sid, "{{inputs.parameters.subjsesid}}", --sd, "/work", --surf_only, --parallel, --3T, --threads, '4']
+      args: [--allow_root, --sid, "{{inputs.parameters.subjsesid}}", --sd, "/work", --surf_only, --parallel, --3T, --threads, '4', --fs_license, "{{inputs.artifacts.fslicense.path}}"]
     inputs:
       artifacts:
         - name: segmentedOutput
@@ -191,5 +416,24 @@ spec:
       artifacts:
         - name: parc_output
           path: /work
+          s3:
+            key: 'derivatives/fastsurfer/{{inputs.parameters.subjsesid}}'
+
+  # - name: fmriprep
+  #   container:
+  #     imagePullPolicy: "IfNotPresent"
+  #     image: nipreps/fmriprep:latest
+  #     # Argo requires us to specify the command (entrypoint), even if its already defined in the image
+  #     command: ["/opt/conda/envs/fmriprep/bin/fmriprep"]
+  #     # Using /input as the bids_dir and /output as the output_dir
+  #     args: [--skip_bids_validation, --participant-label, "{{inputs.parameters.subjsesid}}",
+  #           --nprocs, "4", "--omp-nthreads", "4", --mem, "8000", --fs-subjects-dir, 
+  #           /input /output participant]
+  #     inputs:
+  #       artifacts:
+  #       - name: parc_output
+  #         path: /output/freesurfer
+  #       - name: 
+
 
 

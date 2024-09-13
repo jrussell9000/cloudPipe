@@ -9,18 +9,19 @@ provider "aws" {
   region = "us-east-1"
 }
 
-provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  token                  = data.aws_eks_cluster_auth.this.token
-}
-
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
     token                  = data.aws_eks_cluster_auth.this.token
   }
+}
+
+provider "kubectl" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+  token                  = data.aws_eks_cluster_auth.this.token
+  load_config_file       = false
 }
 
 data "aws_eks_cluster_auth" "this" {
@@ -36,43 +37,9 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
-#---------------------------------------------------------------
-# Example IAM policy for Spark job execution
-#---------------------------------------------------------------
-data "aws_iam_policy_document" "spark_operator" {
-  statement {
-    sid       = ""
-    effect    = "Allow"
-    resources = ["arn:${data.aws_partition.current.partition}:s3:::*"]
-
-    actions = [
-      "s3:DeleteObject",
-      "s3:DeleteObjectVersion",
-      "s3:GetObject",
-      "s3:ListBucket",
-      "s3:PutObject",
-    ]
-  }
-
-  statement {
-    sid       = ""
-    effect    = "Allow"
-    resources = ["arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:*"]
-
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:DescribeLogGroups",
-      "logs:DescribeLogStreams",
-      "logs:PutLogEvents",
-    ]
-  }
-}
-
 locals {
   name   = var.name
   region = var.region
-  azs    = slice(data.aws_availability_zones.available.names, 0, 2)
 
   account_id = data.aws_caller_identity.current.account_id
   partition  = data.aws_partition.current.partition

@@ -26,10 +26,10 @@ output "cluster_endpoint" {
 # Private Subnets
 ################################################################################
 
-output "subnet_ids_starting_with_100" {
-  description = "Secondary CIDR Private Subnet IDs for EKS Data Plane"
-  value       = compact([for subnet_id, cidr_block in zipmap(module.vpc.private_subnets, module.vpc.private_subnets_cidr_blocks) : substr(cidr_block, 0, 4) == "100." ? subnet_id : null])
-}
+# output "subnet_ids_starting_with_100" {
+#   description = "Secondary CIDR Private Subnet IDs for EKS Data Plane"
+#   value       = compact([for subnet_id, cidr_block in zipmap(module.vpc.private_subnets, module.vpc.private_subnets_cidr_blocks) : substr(cidr_block, 0, 4) == "100." ? subnet_id : null])
+# }
 
 # output "s3_bucket_id_spark_history_server" {
 #   description = "Spark History server logs S3 bucket ID"

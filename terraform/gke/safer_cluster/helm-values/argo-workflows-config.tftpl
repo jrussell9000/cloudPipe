@@ -1,0 +1,30 @@
+server:
+  serviceAccount:
+    create: true
+    name: ${serverSAname}
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+  serviceType: LoadBalancer
+  extraArgs:
+    - "--auth-mode=server"
+
+useStaticCredentials: false
+artifactRepository:
+  archiveLogs: true
+  gcs:
+    bucket: fastproc_storage
+    keyFormat: "blah"
+
+useDefaultArtifactRepo: true
+
+controller:
+  serviceAccount:
+    create: true
+    name: ${controllerSAname}
+  name: ""
+  service:
+    type:
+
+workflowNamespaces:
+  - "argo-workflows"

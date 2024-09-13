@@ -24,23 +24,6 @@ resource "aws_iam_policy" "argowf_server" {
   policy = data.aws_iam_policy_document.argowf_server.json
 }
 
-module "argo_workflows_server_irsa_aws" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.14"
-
-  role_name = "argowf-server-role"
-
-  role_policy_arns = {
-    "S3RO" = aws_iam_policy.argowf_server.arn
-  }
-
-  oidc_providers = {
-    main = {
-      provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["${lower(var.argowf_namespace)}:${lower(var.argowf_server_serviceaccount)}"]
-    }
-  }
-}
 
 data "aws_iam_policy_document" "argowf_controller" {
   statement {
@@ -80,6 +63,27 @@ module "argo_workflows_controller_irsa_aws" {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
       namespace_service_accounts = ["${lower(var.argowf_namespace)}:${lower(var.argowf_controller_serviceaccount)}"]
+    }
+  }
+}
+
+#---------------------------------------------------------------
+# IRSA for Karpenter
+#---------------------------------------------------------------
+module "argo_workflows_server_irsa_aws" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.14"
+
+  role_name = "argowf-server-role"
+
+  role_policy_arns = {
+    "S3RO" = aws_iam_policy.argowf_server.arn
+  }
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["${lower(var.argowf_namespace)}:${lower(var.argowf_server_serviceaccount)}"]
     }
   }
 }
