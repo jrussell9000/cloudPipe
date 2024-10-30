@@ -8,7 +8,6 @@ targets=(
   "module.eks"
   "module.ebs_csi_driver_irsa"
   "module.eks_blueprints_addons"
-  "module.eks_data_addons"
 )
 
 # Initialize Terraform
@@ -37,4 +36,4 @@ else
   exit 1
 fi
 
-aws eks update-kubeconfig --name batch-eks --region $AWS_DEFAULT_REGION
+aws eks update-kubeconfig --name fastproc-eks --region $AWS_DEFAULT_REGION

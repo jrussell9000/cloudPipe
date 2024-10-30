@@ -1,0 +1,11 @@
+# The YAML files in this folder configure a Fluent-Bit 
+# daemonset that outputs to CloudWatch
+
+# See instructions:
+# https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-logs-FluentBit.html
+# https://docs.aws.amazon.com/batch/latest/userguide/batch-eks-cloudwatch-logs.html
+
+Steps:
+1. Create the amazon-cloudwatch namespace: kubectl apply -f cloudwatch-namespace.yaml
+2. Create the fluent-bit 'cluster info' configmap: kubectl apply -f fluent-bit-cluster-info.yaml
+3. Create everything else and configure fluent-bit as necessary to communicate with cloudwatch: kubectl apply -f fluent-bit.yaml

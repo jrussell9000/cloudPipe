@@ -20,8 +20,8 @@ variable "ssh_key" {
 
 variable "vpc_name" {
   type        = string
-  default     = "batch-eks-vpc"
-  description = "Name for the VPC supporting Batch on EKS"
+  default     = "fastproc-eks-vpc"
+  description = "Name for the VPC underlying EKS"
 }
 
 variable "vpc_cidr" {
@@ -66,12 +66,12 @@ variable "eks_data_plane_subnet_secondary_cidr" {
 *****************/
 
 variable "cluster_name" {
-  default = "batch-eks"
+  default = "fastproc-eks"
   type    = string
 }
 
 variable "name" {
-  default = "batch-eks"
+  default = "fastproc"
   type    = string
 }
 
@@ -87,9 +87,9 @@ variable "additional_user_data" {
 }
 
 
-/*********************************
+/*************************
 * GPU Operator Variables *
-**********************************/
+**************************/
 variable "gpu_operator_version" {
   default     = "24.6.0"
   description = "Version of the GPU Operator plugin"
@@ -104,9 +104,6 @@ variable "gpu_operator_namespace" {
 # Managed Node Pool Variables #
 ###############################
 
-/*****************************************
-* Control - GPU-only Node Pool Variables *
-******************************************/
 variable "eksControl_gpu_nodePool_instance_types" {
   type        = list(string)
   default     = ["g3s.xlarge"]
@@ -131,27 +128,45 @@ variable "eksControl_desired_gpu_nodes" {
   description = "Minimum number of GPU nodes in the Autoscaling Group"
 }
 
-###############################
-# Managed Node Pool Variables #
-###############################
 
 # variable "s3_bucket_name" {
 #   type = string
 #   default = "fastProc"
 # }
 
+############################
+# Argo Workflows Variables #
+############################
 
-variable "argowf_namespace" {
+variable "argo_workflows_namespace" {
   type    = string
   default = "argo-workflows"
 }
 
-variable "argowf_server_serviceaccount" {
+variable "argo_workflows_server_serviceaccount" {
   type    = string
-  default = "argo-workflows-server-sa"
+  default = "argo-workflows-server"
 }
 
-variable "argowf_controller_serviceaccount" {
+variable "argo_workflows_controller_serviceaccount" {
   type    = string
-  default = "argo-workflows-controller-sa"
+  default = "argo-workflows-controller"
+}
+
+#######################
+# Karpenter Variables #
+#######################
+
+variable "karpenter_namespace" {
+  type    = string
+  default = "karpenter"
+}
+
+#######################
+# SQS Queue Variables #
+#######################
+
+variable "queue_name" {
+  type    = string
+  default = "fastprocqueue"
 }

@@ -1,0 +1,27 @@
+# From aws/karpenter-provider aws: https://github.com/aws/karpenter-provider-aws/blob/main/website/content/en/preview/getting-started/getting-started-with-karpenter/prometheus-values.yaml
+
+alertmanager:
+  enabled: true
+  persistentVolume:
+    enabled: true
+    storageClassName: prometheus-storage
+
+server:
+  fullnameOverride: prometheus-server
+  persistentVolume:
+    enabled: true
+    storageClassName: prometheus-storage
+
+extraScrapeConfigs: |
+    - job_name: karpenter
+      kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - ${KARPENTER_NAMESPACE}
+      relabel_configs:
+      - source_labels:
+        - __meta_kubernetes_endpoints_name
+        - __meta_kubernetes_endpoint_port_name
+        action: keep
+        regex: karpenter;http-metrics

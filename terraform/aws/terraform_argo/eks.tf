@@ -9,8 +9,7 @@ module "eks" {
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
 
-  cluster_endpoint_public_access = true
-  # We want our 'creator' account to be able to manage the cluster
+  cluster_endpoint_public_access           = true
   enable_cluster_creator_admin_permissions = true
 
   vpc_id     = module.vpc.vpc_id
@@ -23,41 +22,10 @@ module "eks" {
   create_cluster_security_group = false
   create_node_security_group    = false
 
-  cluster_addons = {
-    aws-ebs-csi-driver = {
-      most_recent = true
-    }
-    coredns = {
-      configuration_values = jsonencode({
-        tolerations = [
-          # Allow CoreDNS to run on the same nodes as the Karpenter controller
-          # for use during cluster creation when Karpenter nodes do not yet exist
-          {
-            key    = "karpenter.sh/controller"
-            value  = "true"
-            effect = "NoSchedule"
-          }
-        ]
-      })
-    }
-    eks-pod-identity-agent = {
-      most_recent = true
-    }
-    kube-proxy = {
-      most_recent = true
-    }
-    vpc-cni = {
-      before_compute = true
-      most_recent    = true
-    }
-  }
-
   access_entries = {
-    # One access entry with a policy associated
     netidadmin = {
       kubernetes_groups = []
       principal_arn     = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/NetIDAdministratorAccess"
-
       policy_associations = {
         clusteradmin = {
           policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
@@ -71,30 +39,18 @@ module "eks" {
 
   eks_managed_node_group_defaults = {
     iam_role_additional_policies = {
-      # Not required, but used in the example to access the nodes to inspect mounted volumes
       AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-      ArgoS3IRSAIamPolicy          = aws_iam_policy.argo_s3_irsa_iam_policy.arn
-    }
-    ebs_optimized = true
-    # This block device is used only for the root volume. Adjust volume according to your size.
-    block_device_mappings = {
-      xvda = {
-        device_name = "/dev/xvda"
-        ebs = {
-          volume_size = 50
-          volume_type = "gp3"
-        }
-      }
+      AmazonEBSCSIDriverPolicy     = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
     }
   }
 
   eks_managed_node_groups = {
     karpenter = {
+      name           = "karpenter"
       instance_types = ["t3.medium"]
-
-      min_size     = 1
-      max_size     = 1
-      desired_size = 1
+      min_size       = 1
+      max_size       = 1
+      desired_size   = 1
 
       labels = {
         # Used to ensure Karpenter runs on nodes that it does not manage
@@ -104,11 +60,11 @@ module "eks" {
       taints = {
         # The pods that do not tolerate this taint should run on nodes
         # created by Karpenter
-        karpenter = {
+        addons = {
           key    = "karpenter.sh/controller"
           value  = "true"
           effect = "NO_SCHEDULE"
-        }
+        },
       }
     }
 
@@ -119,15 +75,33 @@ module "eks" {
       min_size       = 1
       max_size       = 1
       desired_size   = 1
+      # GPU-Operator requires a sizable root volume to hold CUDA
+      ebs_optimized = true
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size = 20
+            volume_type = "gp2"
+          }
+        }
+      }
     }
   }
-
-  # node_security_group_tags = merge(local.tags, {
-  #   # NOTE - if creating multiple security groups with this module, only tag the
-  #   # security group that Karpenter should utilize with the following tag
-  #   # (i.e. - at most, only one security group should have this tag in your account)
-  #   "karpenter.sh/discovery" = var.cluster_name
-  # })
-
 }
 
+# Karpenter requires we select a security group using a tag
+resource "aws_ec2_tag" "cluster_primary_security_group" {
+  resource_id = module.eks.cluster_primary_security_group_id
+  key         = "karpenter.sh/discovery"
+  value       = module.eks.cluster_name
+}
+
+# resource "kubernetes_namespace" "monitoring" {
+#   metadata {
+#     annotations = {
+#       name = "monitoring-ns"
+#     }
+#     name = "monitoring"
+#   }
+# }

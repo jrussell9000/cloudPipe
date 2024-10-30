@@ -31,12 +31,12 @@ module "vpc" {
   # default_security_group_tags   = { Name = "${var.cluster_name}-default" }
 
   public_subnet_tags = {
-    "kubernetes.io/role/elb" = 1
+    # "kubernetes.io/role/elb" = 1
   }
 
   private_subnet_tags = {
-    "kubernetes.io/role/internal-elb" = 1
-    # Tags subnets for Karpenter auto-discovery
+    # "kubernetes.io/role/internal-elb" = 1
+    # Karpenter requires us to specify a subnet tag so we can select the subnet(s) where nodes will be created
     "karpenter.sh/discovery" = var.cluster_name
   }
 }

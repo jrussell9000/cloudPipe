@@ -1,0 +1,4 @@
+{
+    "Policy": "{\n  \"Version\" : \"2012-10-17\",\n  \"Statement\" : [ {\n    \"Sid\" : \"Default\",\n    \"Effect\" : \"Allow\",\n    \"Principal\" : {\n      \"AWS\" : \"arn:aws:iam::026415314835:root\"\n    },\n    \"Action\" : \"kms:*\",\n    \"Resource\" : \"*\"\n  }, {\n    \"Sid\" : \"KeyAdministration\",\n    \"Effect\" : \"Allow\",\n    \"Principal\" : {\n      \"AWS\" : \"arn:aws:iam::026415314835:user/jdrussell3\"\n    },\n    \"Action\" : [ \"kms:Update*\", \"kms:UntagResource\", \"kms:TagResource\", \"kms:ScheduleKeyDeletion\", \"kms:Revoke*\", \"kms:ReplicateKey\", \"kms:Put*\", \"kms:List*\", \"kms:ImportKeyMaterial\", \"kms:Get*\", \"kms:Enable*\", \"kms:Disable*\", \"kms:Describe*\", \"kms:Delete*\", \"kms:Create*\", \"kms:CancelKeyDeletion\" ],\n    \"Resource\" : \"*\"\n  } ]\n}",
+    "PolicyName": "default"
+}

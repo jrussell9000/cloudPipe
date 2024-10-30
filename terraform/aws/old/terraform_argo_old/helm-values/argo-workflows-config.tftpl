@@ -1,3 +1,10 @@
+workflow:
+  serviceAccount:
+    create: true
+    name: ${controllerSAname}
+    annotations:
+      eks.amazonaws.com/role-arn: ${ controllerIAMarn }
+
 server:
   serviceAccount:
     create: true
@@ -14,9 +21,6 @@ server:
   - key: "CriticalAddonsOnly"
     value: "true"
     effect: "NoSchedule"
-
-
-
 
 useStaticCredentials: false
 artifactRepository:
@@ -40,8 +44,8 @@ controller:
   - key: "CriticalAddonsOnly"
     value: "true"
     effect: "NoSchedule"
-
-
+  # workflowDefaults:
+  #   serviceAccountName: ${controllerSAname}
 
 workflowNamespaces:
   - "argo-workflows"
