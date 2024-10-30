@@ -1,1 +1,0 @@
-Never use double quotes. YAML doesn't handle these well and WILL raise mysterious issues
