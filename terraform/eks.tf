@@ -22,20 +22,20 @@ module "eks" {
   create_cluster_security_group = false
   create_node_security_group    = false
 
-  access_entries = {
-    netidadmin = {
-      kubernetes_groups = []
-      principal_arn     = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/NetIDAdministratorAccess"
-      policy_associations = {
-        clusteradmin = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
-          }
-        }
-      }
-    }
-  }
+  # access_entries = {
+  #   netidadmin = {
+  #     kubernetes_groups = []
+  #     principal_arn     = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/NetIDAdministratorAccess"
+  #     policy_associations = {
+  #       clusteradmin = {
+  #         policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  #         access_scope = {
+  #           type = "cluster"
+  #         }
+  #       }
+  #     }
+  #   }
+  # }
 
   eks_managed_node_group_defaults = {
     iam_role_additional_policies = {

@@ -18,6 +18,7 @@ spec:
   securityContext:
     runAsUser: 1000
     runAsGroup: 1000
+    runAsNonRoot: true
 
   # Arguments passed at the command line ('-p arg=')
   arguments:
@@ -41,30 +42,42 @@ spec:
     dag:
       # Providing each task in the DAG, its dependencies, and any output artifacts to be passed
       tasks:
-        - name: fastsurfer-segmentation
-          templateRef:
-            name: abcd-fastsurfer-segmentation-workflow-template-submittable
-            template: fastsurfer-segmentation-template
+        # - name: fastsurfer-segmentation
+        #   templateRef:
+        #     name: abcd-fastsurfer-segmentation-workflow-template-submittable
+        #     template: fastsurfer-segmentation-template
 
-        - name: fastsurfer-parcellation
-          templateRef:
-            name: abcd-fastsurfer-parcellation-workflow-template-submittable
-            template: fastsurfer-parcellation-template
-          dependencies:
-            - fastsurfer-segmentation
-          # Artifacts passed between templates must be specified here, at the workflow level
-          arguments:
-            artifacts:
-              - name: segmentation-output
-                from: '{{tasks.fastsurfer-segmentation.outputs.artifacts.segmentation-output}}'
+        # - name: fastsurfer-parcellation
+        #   templateRef:
+        #     name: abcd-fastsurfer-parcellation-workflow-template-submittable
+        #     template: fastsurfer-parcellation-template
+        #   dependencies:
+        #     - fastsurfer-segmentation
+        #   # Artifacts passed between templates must be specified here, at the workflow level
+        #   arguments:
+        #     artifacts:
+        #       - name: segmentation-output
+        #         from: '{{tasks.fastsurfer-segmentation.outputs.artifacts.segmentation-output}}'
+
+        # - name: fmriprep
+        #   templateRef: 
+        #     name: abcd-fmriprep-workflow-template-submittable
+        #     template: fmriprep-template
+        #   dependencies:
+        #     - fastsurfer-parcellation
+        #   arguments:
+        #     artifacts:
+        #       - name: fastsurfer-output
+        #         from: '{{tasks.fastsurfer-parcellation.outputs.artifacts.fastsurfer-output}}'
 
         - name: fmriprep
           templateRef: 
             name: abcd-fmriprep-workflow-template-submittable
             template: fmriprep-template
-          dependencies:
-            - fastsurfer-parcellation
           arguments:
             artifacts:
-              - name: fastsurfer-output
-                from: '{{tasks.fastsurfer-parcellation.outputs.artifacts.fastsurfer-output}}'
+            - name: fastsurfer-output
+              mode: 0777
+              recurseMode: true
+              s3:
+                key: derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}/fastsurfer-output.tar.gz

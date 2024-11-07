@@ -7,6 +7,7 @@ spec:
   securityContext:
     runAsUser: 1000
     runAsGroup: 1000
+    fsGroup: 1000
     runAsNonRoot: true
 
   templates:
@@ -29,7 +30,12 @@ spec:
       # FastSurfer Output
       # https://fmriprep.org/en/stable/usage.html#using-a-previous-run-of-freesurfer
       - name: fastsurfer-output
-        path: /home/fmriprep/output/sourcedata/freesurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}
+        path: /home/fmriprep/output/sourcedata/freesurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}/fastsurfer-output.tar.gz
+        mode: 0777
+        recurseMode: true
+        ### TEMPORARY ###
+        # s3:
+        #   key: derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}
 
       # fmriprep requires fsaverage to generate cifti output
       - name: fsaverage
@@ -95,7 +101,9 @@ spec:
         - '--skip-bids-validation'
         - '--fs-license-file'
         - '/home/fmriprep/.license'
-        - '--fs-no-reconall'
+        - '--fs-subjects-dir'
+        - '/home/fmriprep/output/sourcedata/freesurfer'
+        # - '--fs-no-reconall'
         # ABCD MinProc data is already fieldmap corrected (source?)
         - '--ignore'
         - 'fieldmaps'

@@ -1,6 +1,10 @@
 {
     "yaml.schemas": {
-        "https://raw.githubusercontent.com/argoproj/argo-workflows/main/api/jsonschema/schema.json": "argo/*.yaml",
-        "https://json.schemastore.org/github-workflow.json": "file:///home/jdrussell3/fastProc/batched/deploy.yml"
+        "https://raw.githubusercontent.com/argoproj/argo-workflows/main/api/jsonschema/schema.json": [
+            "argo/*.yaml",
+            "file:///home/jdrussell3/fastProc/argo/fmriprepPipeline.yaml"
+        ],
+        "https://json.schemastore.org/github-workflow.json": "file:///home/jdrussell3/fastProc/batched/deploy.yml",
+        "https://json.schemastore.org/yamllint.json": "file:///home/jdrussell3/fastProc/terraform/aws/terraform_argo/helm-values/prometheus.yaml"
     }
 }

@@ -35,3 +35,5 @@ terraform.rc
 
 *.cfg
 kubecon-2024-eu-argocon/
+
+.vscode/

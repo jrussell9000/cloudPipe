@@ -7,6 +7,7 @@ spec:
   securityContext:
     runAsUser: 1000
     runAsGroup: 1000
+    fsGroup: 1000
     runAsNonRoot: true
 
   templates:
@@ -25,13 +26,13 @@ spec:
     outputs:
       artifacts:
       - name: segmentation-output
-        path: /home/nonroot/work/{{workflow.parameters.subjIDses}}
+        path: /home/nonroot/work/{{workflow.parameters.subjIDses}}/
         s3:
           # Workflows will automatically compress the output artifact, but we need to manually add the .tar.gz
-          key: derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}/fastsurfer-output.tar.gz
+          key: derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}
         # Keeping output compression on allows us to retain symbolic links, which aren't allowed on S3
-        # archive:
-        #   none: {}
+        archive:
+          none: {}
     
     nodeSelector:
       karpenter.sh/nodepool: al2-gpu-nodepool

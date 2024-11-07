@@ -27,7 +27,7 @@ spec:
       - name: fastsurfer-output
         path: /home/nonroot/{{workflow.parameters.subjIDses}}
         s3:
-          key: derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}/fastsurfer-output.tar.gz
+          key: derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}
 
     nodeSelector:
       karpenter.sh/nodepool: al2-cpuheavy-nodepool
