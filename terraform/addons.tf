@@ -2,12 +2,19 @@
 # EKS/K8s Addons
 #################################################################################
 
+locals {
+  cluster_secretstore_name = "external-secrets-clusterstore"
+  cluster_secretstore_sa   = "external-secrets-sa"
+  # Argo Workflows db secrets must be in the same namespace as the controller
+  # https://github.com/argoproj/argo-helm/blob/main/charts/argo-workflows/values.yaml#L187
+}
+
 #---------------------------------------------------------------
 # IRSA for EBS CSI Driver
 #---------------------------------------------------------------
 module "ebs_csi_driver_irsa" {
   source                = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version               = "~> 5.34"
+  version               = "~> 5.4"
   role_name_prefix      = format("%s-%s-", local.name, "ebs-csi-driver")
   attach_ebs_csi_policy = true
   oidc_providers = {
@@ -16,10 +23,11 @@ module "ebs_csi_driver_irsa" {
       namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
     }
   }
-  tags = local.tags
 }
 
-
+#---------------------------------------------------------------
+# EKS Blueprints Addons
+#---------------------------------------------------------------
 module "eks_blueprints_addons" {
   source  = "aws-ia/eks-blueprints-addons/aws"
   version = "~> 1.2"
@@ -29,82 +37,50 @@ module "eks_blueprints_addons" {
   cluster_version   = module.eks.cluster_version
   oidc_provider_arn = module.eks.oidc_provider_arn
 
+  enable_cert_manager = true
+
+  enable_aws_load_balancer_controller = true
+  aws_load_balancer_controller = {
+    set = [
+      {
+        name  = "vpcId"
+        value = module.vpc.vpc_id
+      },
+      {
+        name  = "podDisruptionBudget.maxUnavailable"
+        value = 1
+      },
+      {
+        # Cert-manager, external-secrets kick back errors if not set to false
+        name  = "enableServiceMutatorWebhook"
+        value = "false"
+      }
+    ]
+  }
+
+  # EKS Blueprints Addons installs the helm release, creates the IRSA account, 
+  # and attaches the policy but does not set up the secret store
+  enable_external_secrets = true
+  # Defining the SA so we can reference it later
+  external_secrets = {
+    service_account_name = local.cluster_secretstore_sa
+  }
 
   eks_addons = {
     aws-ebs-csi-driver = {
+      most_recent              = true
       service_account_role_arn = module.ebs_csi_driver_irsa.iam_role_arn
-    }
-    coredns = {
-      most_recent = true
-      configuration_values = jsonencode({
-        tolerations = [
-          # Allow CoreDNS to run on the same nodes as the Karpenter controller
-          # for use during cluster creation when Karpenter nodes do not yet exist
-          {
-            key    = "karpenter.sh/controller"
-            value  = "true"
-            effect = "NoSchedule"
-          }
-        ]
-      })
-    }
-    eks-pod-identity-agent = {
-      most_recent = true
-    }
-    kube-proxy = {
-      most_recent = true
-    }
-    vpc-cni = {
-      before_compute = true
-      most_recent    = true
+      preserve                 = false
+      configuration_values     = jsonencode({ defaultStorageClass = { enabled = true } })
     }
   }
-  enable_metrics_server = true
-  metrics_server = {
-    values = [templatefile("${path.module}/helm-values/metrics-server-values.yaml", {})]
-  }
+}
 
-  # Is this necessary?
-  # enable_aws_load_balancer_controller = true
-  # aws_load_balancer_controller = {
-  #   chart_version    = "1.8.2"
-  #   name             = "aws-load-balancer-controller"
-  #   namespace        = "aws-lb-ctrl"
-  #   create_namespace = true
-  #   set = [{
-  #     name  = "enableServiceMutatorWebhook"
-  #     value = "false"
-  #   }]
-  # }
-
-  #---------------------------------------
-  # Argo Workflows & Argo Events
-  #---------------------------------------
-  # enable_argo_workflows = true
-  # argo_workflows = {
-  #   name       = "argo-workflows"
-  #   namespace  = "argo-workflows"
-  #   repository = "https://argoproj.github.io/argo-helm"
-  #   values = [
-  #     templatefile("${path.module}/helm-values/argo-workflows-config.tftpl",
-  #       {
-  #         # Specifying the IRSA accounts to use
-  #         argos3accessarn  = module.argo_workflows_s3_access.iam_role_arn
-  #         controllerIAMarn = module.argo_workflows_controller_irsa.iam_role_arn
-  #         controllerSAname = module.argo_workflows_controller_irsa.iam_role_name
-  #         serverIAMarn     = module.argo_workflows_server_irsa.iam_role_arn
-  #         serverSAname     = module.argo_workflows_server_irsa.iam_role_name
-  #     })
-  #   ]
-  # }
-
-  # enable_argo_events = true
-  # argo_events = {
-  #   name       = "argo-events"
-  #   namespace  = "argo-events"
-  #   repository = "https://argoproj.github.io/argo-helm"
-  #   values     = [templatefile("${path.module}/helm-values/argo-events-values.yaml", {})]
-  # }
+resource "time_sleep" "blueprints_addons_sleep" {
+  depends_on = [
+    module.eks_blueprints_addons
+  ]
+  create_duration = "15s"
 }
 
 /***********************************
@@ -121,7 +97,6 @@ resource "helm_release" "gpu_operator" {
   create_namespace = true
   atomic           = true
   cleanup_on_fail  = true
-
 
   # Chart Customization Options: 
   # https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html#chart-customization-options
@@ -167,68 +142,6 @@ resource "helm_release" "gpu_operator" {
     value = "all-1g.10gb"
   }
 
-  values = [file("${path.module}/yamls/gpu-operator/gpuoperator-karpenter-tolerations.yaml")]
+  #values = [file("${path.module}/yamls/gpu-operator/gpuoperator-karpenter-tolerations.yaml")]
 }
 
-# resource "kubernetes_config_map_v1" "time-slicing-config" {
-#   metadata {
-#     name = "time-slicing-config"
-#   }
-#   data = {
-#     "time-slicing-config" = "${file("${path.module}/yamls/gpu-operator/time-slicing-config-fine.yaml")}"
-#   }
-# }
-
-/*********************************
-* Fluent-Bit for AWS Batch Setup *
-**********************************/
-
-# resource "kubectl_manifest" "fluent-bit-namespace" {
-#   yaml_body = "${file("${path.module}/yamls/fluent-bit/cloudwatch-namespace.yaml")}"
-# }
-# resource "kubectl_manifest" "fluent-bit-cluster-info" {
-#   yaml_body = "${file("${path.module}/yamls/fluent-bit/fluent-bit-cluster-info.yaml")}"
-# }
-# resource "kubectl_manifest" "fluent-bit-config" {
-#   yaml_body = "${file("${path.module}/yamls/fluent-bit/fluent-bit.yaml")}"
-# }
-
-
-# resource "helm_release" "cert-manager" {
-#   name             = lower(local.name)
-#   repository       = "https://charts.jetstack.io"
-#   chart            = "cert-manager"
-#   namespace        = "kube-system"
-#   create_namespace = false
-#   cleanup_on_fail  = true
-
-#   values = [file("${path.module}/helm-values/cert-manager-values.yaml")]
-# }
-
-/************************************
-* NVIDIA Device Plugin Installation *
-*************************************/
-
-# resource "helm_release" "nvdp" {
-#   name = "nvidia-device-plugin"
-#   repository = "https://nvidia.github.io/k8s-device-plugin"
-#   chart = "nvdp/nvidia-device-plugin"
-#   version = "0.16.1"
-#   namespace = var.nvdp_namespace
-#   create_namespace = true
-#   atomic = true
-#   cleanup_on_fail = true
-#   set {
-#     name = "gfd.enabled"
-#     value = "true"
-#   }
-#   set {
-#     name = "migStrategy"
-#     value = "single"
-#   }
-#   set {
-#     name = "runtimeClassName"
-#     value = "nvidia"
-#   }
-#   values = [file("${path.module}/yamls/nvidia-device-plugin/nvdp_config.yml")]
-# }

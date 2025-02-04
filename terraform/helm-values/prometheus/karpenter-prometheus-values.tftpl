@@ -12,6 +12,12 @@ server:
   fullnameOverride: prometheus-server
   remoteWrite: 
   - url: ${amp_prometheus_url}
+    sigv4: 
+      region: ${region}
+    queue_config:
+      max_samples_per_send: 1000
+      max_shards: 200
+      capacity: 2500
   persistentVolume:
     enabled: true
     storageSpec:

@@ -4,9 +4,8 @@
 *****************/
 
 variable "region" {
-  description = "AWS region to provision the EKS cluster"
-  default     = "us-east-1"
-  type        = string
+  default = "us-east-2"
+  type    = string
 }
 
 variable "ssh_key" {
@@ -17,12 +16,6 @@ variable "ssh_key" {
 /****************
 * VPC Variables *
 *****************/
-
-variable "vpc_name" {
-  type        = string
-  default     = "fastproc-eks-vpc"
-  description = "Name for the VPC underlying EKS"
-}
 
 variable "vpc_cidr" {
   description = "VPC CIDR for Batch on EKS"
@@ -60,25 +53,19 @@ variable "eks_data_plane_subnet_secondary_cidr" {
   type        = list(string)
 }
 
-
 /****************
 * EKS Variables *
 *****************/
 
-variable "cluster_name" {
-  default = "fastproc-eks"
-  type    = string
-}
-
 variable "name" {
-  default = "fastproc"
+  default = "cloudpipe"
   type    = string
 }
 
-variable "cluster_version" {
+variable "kubernetes_version" {
   description = "Version of EKS to install on the control plane (Major and Minor version only, do not include the patch)"
   type        = string
-  default     = "1.30"
+  default     = "1.31"
 }
 variable "additional_user_data" {
   type        = string
@@ -86,12 +73,11 @@ variable "additional_user_data" {
   description = "User data that is appended to the user data script after of the EKS bootstrap script."
 }
 
-
 /*************************
 * GPU Operator Variables *
 **************************/
 variable "gpu_operator_version" {
-  default     = "24.6.0"
+  default     = "24.9.0"
   description = "Version of the GPU Operator plugin"
 }
 
@@ -128,12 +114,6 @@ variable "eksControl_desired_gpu_nodes" {
   description = "Minimum number of GPU nodes in the Autoscaling Group"
 }
 
-
-# variable "s3_bucket_name" {
-#   type = string
-#   default = "fastProc"
-# }
-
 ############################
 # Argo Workflows Variables #
 ############################
@@ -143,14 +123,70 @@ variable "argo_workflows_namespace" {
   default = "argo-workflows"
 }
 
-variable "argo_workflows_server_serviceaccount" {
+variable "argo_workflows_serverIRSA_name" {
   type    = string
   default = "argo-workflows-server"
 }
 
-variable "argo_workflows_controller_serviceaccount" {
+variable "argo_workflows_controllerIRSA_name" {
   type    = string
   default = "argo-workflows-controller"
+}
+
+variable "argo_workflows_bucket" {
+  type    = string
+  default = "brave-abcd"
+}
+
+variable "argo_workflows_s3accessIRSA_name" {
+  type    = string
+  default = "argo-workflows-s3access"
+}
+
+variable "argo_workflows_db_name" {
+  type        = string
+  description = "Database name"
+  default     = "argoworkflows"
+}
+
+variable "argo_workflows_db_username" {
+  type        = string
+  description = "Database admin account username"
+  default     = "admin"
+}
+
+# variable "db_password" {
+#   type        = string
+#   description = "Database admin account password"
+# }
+
+variable "argo_workflows_db_class" {
+  type        = string
+  description = "Database instance type"
+  default     = "db.m5.large"
+}
+
+variable "argo_workflows_db_allocated_storage" {
+  type        = string
+  description = "The size of the database (Gb)"
+  default     = "20"
+}
+
+variable "argo_workflows_db_secret_name" {
+  type        = string
+  description = "The name of the secret to store the database credentials"
+  default     = "argo-workflows-db-secret"
+}
+
+variable "argo_workflows_db_table_name" {
+  type        = string
+  description = "The name of the database table to create for Argo Workflows"
+  default     = "argo_workflows"
+}
+
+variable "argo_events_namespace" {
+  type    = string
+  default = "argo-events"
 }
 
 #######################
@@ -166,7 +202,18 @@ variable "karpenter_namespace" {
 # SQS Queue Variables #
 #######################
 
-variable "queue_name" {
+
+
+variable "grafana_region" {
   type    = string
-  default = "fastprocqueue"
+  default = "us"
+}
+
+
+
+variable "operator_chart_version" {
+  description = "The chart version of opentelemetry-operator to use"
+  type        = string
+  # renovate-helm: depName=opentelemetry-operator registryUrl=https://open-telemetry.github.io/opentelemetry-helm-charts
+  default = "0.68.1"
 }

@@ -2,12 +2,13 @@
 set -o errexit
 set -o pipefail
 
-export AWS_DEFAULT_REGION="us-east-1"
+export AWS_DEFAULT_REGION="us-east-2"
 
 targets=(
-  "module.eks_data_addons"
+  "module.managed_grafana"
+  "resource.aws_db_instance.argo_workflows_db"
   "module.eks_blueprints_addons"
-  "module.eks"
+  "module.karpenter"
 )
 
 for target in "${targets[@]}"

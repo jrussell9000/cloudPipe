@@ -2,18 +2,25 @@ provider "aws" {
   region = local.region
 }
 
-# ECR always authenticates with `us-east-1` region
-# Docs -> https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html
-# provider "aws" {
-#   alias  = "ecr"
-#   region = "us-east-1"
-# }
-
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-    token                  = data.aws_eks_cluster_auth.this.token
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+      command     = "aws"
+    }
+  }
+}
+
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+    command     = "aws"
   }
 }
 
@@ -21,10 +28,12 @@ provider "helm" {
 provider "kubectl" {
   host                   = module.eks.cluster_endpoint
   cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  token                  = data.aws_eks_cluster_auth.this.token
-  load_config_file       = false
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+    command     = "aws"
+  }
 }
-
 
 data "aws_eks_cluster_auth" "this" {
   name = module.eks.cluster_name
@@ -42,8 +51,4 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
   partition  = data.aws_partition.current.partition
 
-  tags = {
-    Blueprint  = local.name
-    GithubRepo = "github.com/awslabs/data-on-eks"
-  }
 }

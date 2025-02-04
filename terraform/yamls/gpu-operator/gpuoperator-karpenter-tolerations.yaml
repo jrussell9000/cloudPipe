@@ -29,9 +29,6 @@ node-feature-discovery:
     - key: nvidia.com/gpu
       operator: Exists
       effect: NoSchedule
-    - key: "CriticalAddonsOnly"
-      value: "true"
-      effect: "NoSchedule"
   gc:
     tolerations:
     - key: "CriticalAddonsOnly"
