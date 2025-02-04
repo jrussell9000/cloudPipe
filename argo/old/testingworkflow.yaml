@@ -1,0 +1,72 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: pipeline- # string prepended to the workflow ID
+  namespace: argo-workflows
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::xxxxxxxxxxxx:role/argo_workflows_s3access
+spec:
+  archiveLogs: true
+  serviceAccountName: argo-workflows-runner
+  entrypoint: fullPipeline
+
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    runAsNonRoot: true
+
+  # Arguments passed at the command line ('-p arg=')
+  arguments:
+    parameters:
+      - name: subjID
+      - name: ses
+---
+
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: artifact-passing-fail-
+spec:
+  entrypoint: overall
+  templates:
+  - name: overall
+    dag:
+      tasks:
+        - name: step-a
+          template: step-a
+        - name: step-b
+          template: step-b
+          depends: "step-a"
+          arguments:
+            artifacts:
+            - name: result
+              from: "{{tasks.step-a.outputs.artifacts.result}}"
+  - name: step-a
+    outputs:
+      artifacts:
+        - name: result
+          path: /tmp/results
+    script:
+      image: debian:bullseye-slim
+      command: [bash]
+      source: |
+        mkdir /tmp/results
+        echo "abc" > /tmp/results/a.txt
+  - name: step-b
+    inputs:
+      artifacts:
+      - name: result
+        path: /tmp/results
+        #mode: 0644
+        #recurseMode: true
+    script:
+      image: debian:bullseye-slim
+      command: [bash]
+      source: |
+        set -e
+        ls -l /tmp/
+        ls -l /tmp/results/
+        cat /tmp/results/a.txt
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
