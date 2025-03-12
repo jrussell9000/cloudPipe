@@ -5,14 +5,12 @@ metadata:
 spec:
   amiSelectorTerms:
   - alias: al2023@latest
-
   blockDeviceMappings:
   - deviceName: /dev/xvda
     ebs:
       volumeSize: 50Gi
       volumeType: gp3
-      deleteOnTermination: true
-      
+
   role: ${ karpenter_node_iam_role_name }
   subnetSelectorTerms:
   - tags:

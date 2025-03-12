@@ -4,7 +4,7 @@ module "karpenter" {
   version = "~> 20.24"
 
   cluster_name = module.eks.cluster_name
-  # Enable permissions in the 'new' v1.0 releases of Karpenter
+  # Enable permissions in the 'new' v1.0 releases of Karpenter (defaults to false as of 021925 )
   enable_v1_permissions = true
   namespace             = var.karpenter_namespace
 
@@ -12,9 +12,6 @@ module "karpenter" {
   node_iam_role_use_name_prefix   = false
   node_iam_role_name              = "${var.name}-karpenter-node-iam-role"
   create_pod_identity_association = true
-
-  # enable_irsa            = true
-  # irsa_oidc_provider_arn = module.eks.oidc_provider_arn
 
   node_iam_role_additional_policies = {
     AmazonEKS_CNI_Policy                     = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
@@ -55,16 +52,6 @@ resource "helm_release" "karpenter" {
   ]
 }
 
-# Karpenter monitoring requires the Prometheus Operator CRDs
-resource "helm_release" "prometheus_operator_crds" {
-  namespace        = "monitoring"
-  name             = "prometheus-operator-crds"
-  repository       = "https://prometheus-community.github.io/helm-charts"
-  chart            = "prometheus-operator-crds"
-  version          = "~> 14.0.0"
-  create_namespace = true
-  wait             = true
-}
 
 resource "kubectl_manifest" "al2023-nodeclass" {
   yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-nodeclass.yaml",
@@ -113,4 +100,3 @@ resource "kubectl_manifest" "al2023-cpuheavy-nodepool" {
     helm_release.karpenter
   ]
 }
-

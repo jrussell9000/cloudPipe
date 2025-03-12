@@ -1,0 +1,83 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  # name: datatest-workflow
+  namespace: argo-workflows
+  generateName: datatest-workflow-
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::026415314835:role/argo-workflows-s3access
+spec:
+  archiveLogs: true
+  # securityContext:
+  #   runAsUser: 1000
+  #   runAsGroup: 1000
+  #   runAsNonRoot: true
+  serviceAccountName: argo-workflows-s3access
+  # Arguments passed at the command line ('-p arg=')
+  arguments:
+    parameters:
+      - name: ndaGUIDses
+      - name: miNDARpkgID
+        value: '1232648'
+      - name: subjID
+        # Prepending the NDA GUID with 'sub-' per BIDS format
+        value: sub-{{=split(workflow.parameters.ndaGUIDses, '_')[0]}}
+        # Prepending the ABCD timepoint with 'ses-' per BIDS format
+      - name: ses
+        value: ses-{{=split(workflow.parameters.ndaGUIDses, '_')[1]}}
+        # Combining the BIDS formatted subjid and ses into a single string
+        # NOTE: Can ONLY use user-supplied arguments in this expression (e.g., ndaGUIDses) 
+        # or else the parameter won't pass correctly to the templates below
+      - name: subjIDses
+        value: sub-{{=split(workflow.parameters.ndaGUIDses, '_')[0]}}_ses-{{=split(workflow.parameters.ndaGUIDses, '_')[1]}}
+
+  entrypoint: generate-artifacts
+  templates:
+    - name: runall
+      dag:
+        tasks:
+          - name: generate-artifacts
+            template: generate-artifacts
+          - name: process-logs
+            template: process-logs
+            withParam: "{{tasks.generate-artifacts.outputs.result}}"
+            arguments:
+              artifacts:
+                - name: file
+                  s3:
+                    key: "{{item}}"
+
+              parameters:
+                - name: file-name
+                  value: "{{item}}"
+
+    - name: generate-artifacts
+      data:
+        source:
+          artifactPaths:
+            name: '{{ workflow.parameters.subjID}}'
+            s3:
+              bucket: brave-abcd
+              key: 'inputs/{{ workflow.parameters.subjID }}/{{ workflow.parameters.ses }}/func'
+        transformation:
+          - expression: "filter(data, {# endsWith \"nii\"})"
+      outputs:
+        artifacts:
+          - name: file
+            path: /file
+      
+
+    - name: process-logs
+      inputs:
+        parameters:
+          - name: file-name
+        artifacts:
+          - name: file
+            path: /file
+      container:
+        image:  argoproj/argosay:v2
+        command: [ sh, -c ]
+        args:
+          - |
+            echo {{inputs.parameters.file-name}}
+            ls /file

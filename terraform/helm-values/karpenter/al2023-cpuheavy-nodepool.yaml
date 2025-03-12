@@ -12,6 +12,16 @@ spec:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
         name: al2023-nodeclass
+      # Avoid possible race between the scheduler and the CSINode
+      # see https://karpenter.sh/docs/troubleshooting/#pods-were-scheduled-due-to-a-race-condition-in-kubernetes
+      startupTaints:
+        - key: efs.csi.aws.com/agent-not-ready
+          effect: NoExecute
+      # A budget of zero nodes will prevent any of those nodes from being considered for voluntary disruption.
+      # see https://karpenter.sh/docs/concepts/disruption/#example-disable-disruption-on-a-nodepool
+      disruption:
+        budgets:
+          - nodes: "0"
       requirements:
       # see: https://karpenter.sh/docs/concepts/scheduling/#well-known-labels
       # AMD64
@@ -32,7 +42,7 @@ spec:
         operator: Gt
         values: ["2"]
       # Instance category (first letter)
-      - key: "node.kubernetes.io/instance-category"
+      - key: "karpenter.k8s.aws/instance-category"
         operator: In
         values: ["c", "m", "r"]
       # Instance memory (in mebibytes)

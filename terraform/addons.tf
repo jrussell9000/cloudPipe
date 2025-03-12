@@ -10,22 +10,6 @@ locals {
 }
 
 #---------------------------------------------------------------
-# IRSA for EBS CSI Driver
-#---------------------------------------------------------------
-module "ebs_csi_driver_irsa" {
-  source                = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version               = "~> 5.4"
-  role_name_prefix      = format("%s-%s-", local.name, "ebs-csi-driver")
-  attach_ebs_csi_policy = true
-  oidc_providers = {
-    main = {
-      provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
-    }
-  }
-}
-
-#---------------------------------------------------------------
 # EKS Blueprints Addons
 #---------------------------------------------------------------
 module "eks_blueprints_addons" {
@@ -63,19 +47,25 @@ module "eks_blueprints_addons" {
   enable_external_secrets = true
   # Defining the SA so we can reference it later
   external_secrets = {
-    service_account_name = local.cluster_secretstore_sa
+    service_account_name = "external-secrets-sa"
   }
 
-  eks_addons = {
-    aws-ebs-csi-driver = {
-      most_recent              = true
-      service_account_role_arn = module.ebs_csi_driver_irsa.iam_role_arn
-      preserve                 = false
-      configuration_values     = jsonencode({ defaultStorageClass = { enabled = true } })
-    }
-  }
+  enable_aws_efs_csi_driver = true
+  # enable_aws_fsx_csi_driver = true
+  # aws_fsx_csi_driver = {
+  #   # File mode enables volume ownership and permissions via fsGroup,
+  #   # which allows us to set read/write access in Argo Workflows
+  #   # see https://kubernetes-csi.github.io/docs/support-fsgroup.html#csi-volume-fsgroup-policy
+  #   values = [
+  #     <<-EOT
+  #     csidriver:
+  #       fsGroupPolicy: File
+  #     EOT
+  #   ]
+  # }
 }
 
+# Sleep for 15 seconds to give the blueprints extra time to finish setting up
 resource "time_sleep" "blueprints_addons_sleep" {
   depends_on = [
     module.eks_blueprints_addons
@@ -100,7 +90,7 @@ resource "helm_release" "gpu_operator" {
 
   # Chart Customization Options: 
   # https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html#chart-customization-options
-  # Note: Need to specify the driver version and update it as necessaryk get
+  # Note: Need to specify the driver version and update it as necessary get
   set {
     name  = "driver.enabled"
     value = "false"
@@ -141,7 +131,4 @@ resource "helm_release" "gpu_operator" {
     name  = "migManager.default"
     value = "all-1g.10gb"
   }
-
-  #values = [file("${path.module}/yamls/gpu-operator/gpuoperator-karpenter-tolerations.yaml")]
 }
-

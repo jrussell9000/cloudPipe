@@ -1,0 +1,179 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: s3test-
+  namespace: argo-workflows
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::026415314835:role/argo-workflows-s3access
+spec:
+  archiveLogs: true
+  serviceAccountName: argo-workflows-s3access
+
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+  # Formatting Notes:
+  # * Underscores are not allowed in template or task names
+  # * Template names must be in lower case, task names should be camel case
+  # * DO NOT use hyphens if the object will later be referenced by jsonPath
+  #   which treats hyphens as a subtraction sign (this SHOULD be fixable...)
+  entrypoint: fastsurfer-template
+  templates:
+  - name: fastsurfer-template
+    dag:
+      tasks: 
+      - name: pullArtifactsTask
+        template: pullartifactstemplate
+
+      - name: checkArtifactsTask
+        template: checkartifactstemplate
+        dependencies: 
+          - pullArtifactsTask
+
+      - name: fastsurfer-template-creation-dagtask
+        template: fastsurfer-template-creation-template
+        arguments:
+          parameters:
+            - name: Y0
+              value: "{{tasks.checkArtifactsTask.outputs.parameters.Y0}}"
+            - name: T1w_Y0_path
+              value: "{{tasks.checkArtifactsTask.outputs.parameters.T1w_Y0_path}}"
+            - name: T1w_Y2_path
+              value: "{{tasks.checkArtifactsTask.outputs.parameters.T1w_Y2_path}}"
+            - name: T1w_Y4_path
+              value: "{{tasks.checkArtifactsTask.outputs.parameters.T1w_Y4_path}}"
+            - name: T1w_Y6_path
+              value: "{{tasks.checkArtifactsTask.outputs.parameters.T1w_Y6_path}}"
+            - name: T1w_Y8_path
+              value: "{{tasks.checkArtifactsTask.outputs.parameters.T1w_Y8_path}}"
+            - name: T1w_Y10_path
+              value: "{{tasks.checkArtifactsTask.outputs.parameters.T1w_Y10_path}}"
+        dependencies:
+          - checkArtifactsTask
+
+  # template names must be lower case 
+  - name: pullartifactstemplate
+    outputs:
+      parameters:
+        - name: result
+          valueFrom: 
+            path: /tmp/result.json
+    inputs:
+      artifacts: 
+      - name: T1w_Y0
+        # Container path where the output will be saved
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-baselineYear1Arm1/anat/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii'
+
+      - name: T1w_Y2
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-2YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y4
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-4YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y6
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-6YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y8
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-8YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y10
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-10YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii'
+    script:
+      image: python:alpine3.21
+      command: [python]
+      source: |
+        from pathlib import Path
+        import json
+
+        # Create a list of ABCD wave names (BIDS format)
+        timepoints = ["ses-" + time for time in ["baselineYear1Arm1"] + [str(i) + "YearFollowUpYArm1" for i in range(2,11,2)]]
+        # Recursively glob the paths of all T1w NIFTIs
+        T1s = [p for p in Path('/home/nonroot').rglob('*_T1w.nii')]
+        # Create a dict with timepoints as keys and empty strings as values
+        out = {k: "" for k in timepoints}
+        # For each T1 scan file returned by our glob...
+        for T1 in T1s:
+          # Get the time of the T1 scan
+          T1_time = T1.name.split('_')[1]
+          # Add the file path as the value for that timepoint in the dict
+          out[T1_time] = str(T1)
+        # Nested the dict by numeric index
+        out = {i: {k: v} for i, (k, v) in enumerate(out.items())}
+        # Dump the dictionary into a json file
+        with open("/tmp/result.json", "w") as jsonfile:
+          json.dump(out, jsonfile)
+
+  - name: checkartifactstemplate
+    steps:
+      - - name: checkArtifactsStep
+          template: pullartifactstemplate
+    outputs:
+      parameters:
+        - name: Y0
+          valueFrom:
+            expression: "steps.checkArtifactsStep.outputs.parameters.result =~ 'ses-baselineYear1Arm1' ? 'ses-baselineYear1Arm1' : ''"
+        - name: T1w_Y0_path
+          valueFrom:
+            expression: "jsonpath(steps.checkArtifactsStep.outputs.parameters.result, '$.ses-baselineYear1Arm1')"
+        - name: T1w_Y2_path
+          valueFrom:
+            expression: "jsonpath(steps.checkArtifactsStep.outputs.parameters.result, '$.ses-2YearFollowUpYArm1')"
+        - name: T1w_Y4_path
+          valueFrom:
+            expression: "jsonpath(steps.checkArtifactsStep.outputs.parameters.result, '$.ses-4YearFollowUpYArm1')"
+        - name: T1w_Y6_path
+          valueFrom:
+            expression: "jsonpath(steps.checkArtifactsStep.outputs.parameters.result, '$.ses-6YearFollowUpYArm1')"
+        - name: T1w_Y8_path
+          valueFrom:
+            expression: "jsonpath(steps.checkArtifactsStep.outputs.parameters.result, '$.ses-8YearFollowUpYArm1')"
+        - name: T1w_Y10_path
+          valueFrom:
+            expression: "jsonpath(steps.checkArtifactsStep.outputs.parameters.result, '$.ses-10YearFollowUpYArm1')"
+
+  - name: fastsurfer-template-creation-template
+    inputs:
+      parameters:
+        - name: Y0
+        - name: T1w_Y0_path
+        - name: T1w_Y2_path
+        - name: T1w_Y4_path
+        - name: T1w_Y6_path
+        - name: T1w_Y8_path
+        - name: T1w_Y10_path
+      artifacts:
+      - name: fslicense
+        path: /opt/freesurfer/.license
+        s3:
+          key: config/fslicense
+
+    script:
+      env:
+        - name: T1w_Y0_path
+          value: "{{inputs.parameters.T1w_Y0_path}}"
+        - name: Y0
+          value: "{{inputs.parameters.Y0}}"
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
+      command:
+        - '/fastsurfer/recon_surf/long_prepare_template.sh'
+      source: |
+        echo "$T1w_Y0_path" "$Y0"

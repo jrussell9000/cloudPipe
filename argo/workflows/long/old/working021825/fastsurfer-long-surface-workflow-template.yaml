@@ -1,0 +1,114 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: fastsurfer-long-surface-workflow-template
+  namespace: argo-workflows
+spec:
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+  templates:
+  - name: fastsurfer-long-surface-dag-template
+
+    inputs:
+      artifacts:
+      - name: long-segmentation
+      parameters:
+      - name: sessions
+
+    outputs:
+      artifacts:
+        - name: long-complete
+          from: "{{tasks.fastsurfer-long-surface-dagtask.outputs.artifacts.long-complete}}"
+
+    dag:
+      tasks: 
+      - name: format-sessions-dagtask
+        template: format-sessions-template
+        arguments:
+          parameters:
+            - name: sessions
+              value: "{{inputs.parameters.sessions}}"
+
+      - name: fastsurfer-long-surface-dagtask
+        template: fastsurfer-long-surface-template
+        arguments:
+          parameters:
+            - name: sessions
+              value: "{{tasks.format-sessions-dagtask.outputs.result}}"
+          artifacts:
+            - name: long-segmentation
+              from: "{{inputs.artifacts.long-segmentation}}"
+        dependencies:
+          - format-sessions-dagtask
+
+
+  - name: format-sessions-template
+    inputs:
+      parameters:
+        - name: sessions
+
+    script:
+      image: python:alpine3.21
+      command: [python]
+
+      source: |
+        from pathlib import Path
+        sessions = "{{inputs.parameters.sessions}}".split(" ")
+        sessions = [session + "=from-base" for session in sessions]
+        print(sessions)
+
+  - name: fastsurfer-long-surface-template
+    inputs:
+      artifacts:
+      - name: long-segmentation
+        path: '/opt/freesurfer/subjects/{{workflow.parameters.subjID}}'
+
+      - name: fslicense
+        path: /opt/freesurfer/.license
+        s3:
+          key: config/fslicense
+
+      parameters:
+        - name: sessions
+
+    outputs:
+      artifacts:
+      - name: long-complete
+        path: '/opt/freesurfer/subjects/{{workflow.parameters.subjID}}/'
+        s3:
+          # Workflows will automatically compress the output artifact, but we need to manually add the .tar.gz
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.subjID}}-long-complete.tar.gz'
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-cpuheavy-nodepool
+
+    container:
+      imagePullPolicy: IfNotPresent
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
+      env:
+        - name: ARGO_DEBUG_PAUSE_AFTER
+          value: 'true'
+
+      resources:
+        requests:
+          memory: 16Gi
+          cpu: 4000m
+
+      # Per lines 311:313 of long_fastsurfer.sh, need to wrap sessions in quotes and append each incoming session with "=from-base" 
+      command: [/fastsurfer/brun_fastsurfer.sh]
+      args:
+        # Passing timepoints as subjects per long_fastsurfer.sh:333
+        # Need to find a way to pass a flexible cpu count to threads
+        - '--subjects'
+        - '{{inputs.parameters.sessions}}'
+        - '--sd'
+        - /opt/freesurfer/subjects
+        - '--surf_only'
+        - '--long'
+        - '{{workflow.parameters.subjID}}'
+        - '--threads'
+        - '4'

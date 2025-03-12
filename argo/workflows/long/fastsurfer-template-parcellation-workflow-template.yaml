@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: fastsurfer-template-parcellation-workflow-template
+  namespace: argo-workflows
+spec:
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+  templates:
+  - name: fastsurfer-template-parcellation-steps-template
+    steps:
+    - - name: createargstring
+        template: createargstring-template
+
+    - - name: fastsurfer-template-parcellation-step
+        template: fastsurfer-template-parcellation-template
+        arguments:
+          parameters:
+            - name: argstring
+              value: '{{steps.createargstring.outputs.result}}'
+
+  - name: createargstring-template
+    script:
+      image: python:3.12.9-slim-bookworm
+      command: [python]
+      source: |
+        import os
+        subjid = "{{workflow.parameters.subjID}}"
+        subjidwtmpl = str(subjid + "_template")
+        argstring = ' '.join(['--sid', f'{subjidwtmpl}', '--sd', '/opt/freesurfer/subjects', '--surf_only', '--base', '--threads', '8', '--3T', '--fsaparc'])
+        print(argstring)
+
+  - name: fastsurfer-template-parcellation-template
+    inputs:
+      parameters:
+        - name: argstring
+
+      artifacts:
+      - name: fslicense
+        path: '/opt/freesurfer/.license'
+        s3:
+          key: 'config/fslicense'
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-cpuheavy-nodepool
+
+    container:
+      imagePullPolicy: IfNotPresent
+      # deepmi/fastsurfer does NOT explicitly add a nonroot user to the image - which seems to be a requirement for containerd
+      # we'll just create a variant that does add the nonroot user (and their user directory)
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
+
+      volumeMounts:
+      - name: workdir
+        mountPath: /opt/freesurfer/subjects
+
+      env:
+      - name: FS_LICENSE
+        value: /opt/freesurfer/.license
+
+      resources:
+        requests:
+          memory: 16Gi
+          cpu: 8000m
+
+      command: [bash, -c]
+      args: ["/fastsurfer/run_fastsurfer.sh {{inputs.parameters.argstring}}"]

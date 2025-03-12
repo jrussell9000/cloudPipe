@@ -1,0 +1,112 @@
+# https://docs.aws.amazon.com/eks/latest/userguide/fsx-csi.html
+
+resource "aws_security_group" "fsx_lustre" {
+  name_prefix = "${local.name}-fsx-lustre-sg"
+  vpc_id      = module.vpc.vpc_id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_ingress_1" {
+  security_group_id = aws_security_group.fsx_lustre.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 988
+  ip_protocol       = "tcp"
+  to_port           = 988
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_ingress_2" {
+  security_group_id = module.eks.cluster_security_group_id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 988
+  ip_protocol       = "tcp"
+  to_port           = 988
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_ingress_3" {
+  security_group_id = aws_security_group.fsx_lustre.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 1018
+  ip_protocol       = "tcp"
+  to_port           = 1023
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_ingress_4" {
+  security_group_id = module.eks.cluster_security_group_id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 1018
+  ip_protocol       = "tcp"
+  to_port           = 1023
+}
+
+
+#---------------------------------------------------------------
+# Filesystem - FSx for Lustre
+#---------------------------------------------------------------
+resource "aws_fsx_lustre_file_system" "this" {
+  storage_capacity         = 1200
+  subnet_ids               = [module.vpc.private_subnets[0]]
+  deployment_type          = "SCRATCH_2"
+  file_system_type_version = "2.15"
+  security_group_ids       = [aws_security_group.fsx_lustre.id]
+}
+
+#---------------------------------------------------------------
+# Storage Class - FSx for Lustre
+#---------------------------------------------------------------
+
+
+# DO NOT USE - This will produce dynamic provisioning of FSX file systems
+# see: https://stackoverflow.com/a/52669115
+
+# Storageclasses cannot be updated, must be replaced
+# Code below ensures storageclass is replaced every time, regardless of updates
+# see https://stackoverflow.com/a/74944901
+resource "terraform_data" "replacement" {
+  input = timestamp()
+}
+
+resource "kubectl_manifest" "fsx-storage-class" {
+  yaml_body = templatefile("${path.module}/yamls/fsx/fsxLustre-sc.yaml", {
+    fsx_security_group_id = aws_security_group.fsx_lustre.id
+    fsx_subnet            = module.vpc.private_subnets[0]
+  })
+
+  lifecycle {
+    replace_triggered_by = [
+      terraform_data.replacement
+    ]
+  }
+}
+
+#---------------------------------------------------------------
+# Persistent Volume - FSx for Lustre
+#---------------------------------------------------------------
+# Use a (pre-created) PV and a PVC to 'statically' provision a file system
+# Then mount it in the workflow
+resource "kubectl_manifest" "fsx-persistent-volume" {
+  yaml_body = templatefile("${path.module}/yamls/fsx/fsxLustre-static-pv.yaml", {
+    filesystem_id = aws_fsx_lustre_file_system.this.id
+    region        = var.region
+    mountname     = aws_fsx_lustre_file_system.this.mount_name
+  })
+  lifecycle {
+    replace_triggered_by = [
+      terraform_data.replacement
+    ]
+  }
+}
+
+#---------------------------------------------------------------
+# Persistent Volume Claim - FSx for Lustre
+#---------------------------------------------------------------
+resource "kubectl_manifest" "fsx-persistent-volume-claim" {
+  yaml_body = templatefile("${path.module}/yamls/fsx/fsxLustre-static-pvc.yaml", {
+    workflow_namespace = var.argo_workflows_namespace
+  })
+  lifecycle {
+    replace_triggered_by = [
+      terraform_data.replacement
+    ]
+  }
+}
+
+

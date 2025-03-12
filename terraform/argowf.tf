@@ -11,74 +11,6 @@ resource "kubernetes_namespace" "argo_workflows" {
 }
 
 #---------------------------------------------------------------
-# Argo Workflows Secrets
-#---------------------------------------------------------------
-
-resource "aws_kms_key" "secrets" {
-  enable_key_rotation = true
-}
-
-resource "kubectl_manifest" "cluster_secretstore" {
-  yaml_body  = <<-YAML
-    apiVersion: external-secrets.io/v1beta1
-    kind: ClusterSecretStore
-    metadata:
-      name: "${local.cluster_secretstore_name}"
-      namespace: external-secrets
-    spec:
-      provider:
-        aws:
-          service: SecretsManager
-          region: us-east-2
-          auth:
-            jwt:
-              serviceAccountRef:
-                name: ${local.cluster_secretstore_sa}
-                namespace: "external-secrets"
-  YAML
-  depends_on = [module.eks_blueprints_addons]
-}
-
-resource "aws_secretsmanager_secret" "argo_workflows_db_secret" {
-  recovery_window_in_days        = 7
-  kms_key_id                     = aws_kms_key.secrets.arn
-  name_prefix                    = "${var.name}-argo-workflows-db-secret-"
-  force_overwrite_replica_secret = true
-}
-
-resource "aws_secretsmanager_secret_version" "argo_workflows_db_secret" {
-  secret_id = aws_secretsmanager_secret.argo_workflows_db_secret.id
-  secret_string = jsonencode({
-    username = aws_db_instance.argo_workflows_db.username
-    password = aws_db_instance.argo_workflows_db.password
-    database = aws_db_instance.argo_workflows_db.db_name
-    host     = aws_db_instance.argo_workflows_db.address
-    port     = tostring(aws_db_instance.argo_workflows_db.port)
-  })
-}
-
-resource "kubectl_manifest" "argo_workflows_db_secret" {
-  yaml_body = <<-YAML
-    apiVersion: external-secrets.io/v1beta1
-    kind: ExternalSecret
-    metadata:
-      name: ${aws_secretsmanager_secret.argo_workflows_db_secret.name}
-      namespace: ${var.argo_workflows_namespace}
-    spec:
-      refreshInterval: 1h
-      secretStoreRef:
-        name: ${local.cluster_secretstore_name}
-        kind: ClusterSecretStore
-      dataFrom:
-      - extract:
-          key: ${aws_secretsmanager_secret.argo_workflows_db_secret.name}
-  YAML
-
-  depends_on = [kubectl_manifest.cluster_secretstore,
-  kubernetes_namespace.argo_workflows]
-}
-
-#---------------------------------------------------------------
 # Argo Workflows Database
 #---------------------------------------------------------------
 
@@ -94,7 +26,8 @@ resource "aws_db_subnet_group" "argo_workflows" {
 }
 
 resource "aws_security_group" "argo_workflows_db" {
-  vpc_id = module.vpc.vpc_id
+  name_prefix = "${var.name}-mysql-sg-"
+  vpc_id      = module.vpc.vpc_id
 
   ingress {
     from_port = 3306
@@ -141,6 +74,78 @@ resource "aws_db_instance" "argo_workflows_db" {
   skip_final_snapshot   = true
   max_allocated_storage = 1000
   publicly_accessible   = false
+}
+
+#---------------------------------------------------------------
+# Argo Workflows Secrets
+#---------------------------------------------------------------
+
+resource "aws_kms_key" "secrets" {
+  enable_key_rotation = true
+}
+
+resource "kubectl_manifest" "cluster_secretstore" {
+  yaml_body  = <<-YAML
+    apiVersion: external-secrets.io/v1beta1
+    kind: ClusterSecretStore
+    metadata:
+      name: external-secrets-clusterstore
+      namespace: external-secrets
+    spec:
+      provider:
+        aws:
+          service: SecretsManager
+          region: us-east-2
+          auth:
+            jwt:
+              serviceAccountRef:
+                name: external-secrets-sa
+                namespace: "external-secrets"
+  YAML
+  depends_on = [module.eks_blueprints_addons]
+}
+
+resource "aws_secretsmanager_secret" "argo_workflows_db_secret" {
+  recovery_window_in_days        = 7
+  kms_key_id                     = aws_kms_key.secrets.arn
+  name_prefix                    = "${var.name}-argo-workflows-db-secret-"
+  force_overwrite_replica_secret = true
+
+  depends_on = [aws_kms_key.secrets]
+}
+
+resource "aws_secretsmanager_secret_version" "argo_workflows_db_secret" {
+  secret_id = aws_secretsmanager_secret.argo_workflows_db_secret.id
+  secret_string = jsonencode({
+    username = aws_db_instance.argo_workflows_db.username
+    password = aws_db_instance.argo_workflows_db.password
+    database = aws_db_instance.argo_workflows_db.db_name
+    host     = aws_db_instance.argo_workflows_db.address
+    port     = tostring(aws_db_instance.argo_workflows_db.port)
+  })
+  depends_on = [aws_db_instance.argo_workflows_db]
+}
+
+resource "kubectl_manifest" "argo_workflows_db_secret" {
+  yaml_body = <<-YAML
+    apiVersion: external-secrets.io/v1beta1
+    kind: ExternalSecret
+    metadata:
+      name: ${aws_secretsmanager_secret.argo_workflows_db_secret.name}
+      namespace: ${var.argo_workflows_namespace}
+    spec:
+      refreshInterval: 1h
+      secretStoreRef:
+        name: external-secrets-clusterstore
+        kind: ClusterSecretStore
+      dataFrom:
+      - extract:
+          key: ${aws_secretsmanager_secret.argo_workflows_db_secret.name}
+  YAML
+
+  depends_on = [kubernetes_namespace.argo_workflows,
+  aws_secretsmanager_secret.argo_workflows_db_secret]
+
 }
 
 #---------------------------------------------------------------
@@ -278,9 +283,14 @@ module "argo_workflows_s3accessIRSA" {
 # workflow service account in the argo workflows config (e.g., argo-workflows-values.yaml)
 
 resource "helm_release" "argo_workflows_release" {
+
+  # Terraform doesn't automagically incorporate these dependencies
+  # (possibly because they're in templatefile?), so they need to be
+  # added explicitly.
   depends_on = [module.argo_workflows_serverIRSA,
     module.argo_workflows_controllerIRSA,
     module.argo_workflows_s3accessIRSA,
+    aws_secretsmanager_secret.argo_workflows_db_secret,
     resource.kubectl_manifest.argo_workflows_db_secret,
     resource.aws_db_instance.argo_workflows_db
   ]
@@ -289,8 +299,7 @@ resource "helm_release" "argo_workflows_release" {
   chart            = "argo-workflows"
   namespace        = "argo-workflows"
   create_namespace = false
-  cleanup_on_fail  = true
-  recreate_pods    = true
+  wait             = true
 
   values = [
     templatefile("${path.module}/helm-values/argo/workflows/argo-workflows-values.yaml",
@@ -298,7 +307,7 @@ resource "helm_release" "argo_workflows_release" {
         # Specifying the namespace and log bucket
         argo_workflows_namespace = var.argo_workflows_namespace
         argo_workflows_bucket    = var.argo_workflows_bucket
-        region                   = local.region
+        region                   = var.region
 
         # Specifying the IRSA accounts to use
         argo_workflows_s3accessIRSA_arn    = module.argo_workflows_s3accessIRSA.iam_role_arn

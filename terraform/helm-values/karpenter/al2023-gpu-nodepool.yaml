@@ -12,6 +12,16 @@ spec:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
         name: al2023-nodeclass
+      # Avoid possible race between the scheduler and the CSINode
+      # see https://karpenter.sh/docs/troubleshooting/#pods-were-scheduled-due-to-a-race-condition-in-kubernetes
+      startupTaints:
+        - key: efs.csi.aws.com/agent-not-ready
+          effect: NoExecute
+      # A budget of zero nodes will prevent any of those nodes from being considered for voluntary disruption.
+      # see https://karpenter.sh/docs/concepts/disruption/#example-disable-disruption-on-a-nodepool
+      disruption:
+        budgets:
+          - nodes: "0"
       requirements:
       # see: https://karpenter.sh/docs/concepts/scheduling/#well-known-labels
       # AMD64
@@ -28,18 +38,21 @@ spec:
         values: ["spot"]
       # Instance generation
       # Karpenter recommends this setting: https://karpenter.sh/docs/concepts/nodepools/#min-values
-      - key: "karpenter.k8s.aws/instance-generation"
-        operator: Gt
-        values: ["2"]
-      # Instance category (first letter)
-      - key: "node.kubernetes.io/instance-category"
-        operator: In
-        values: ["g"]
+      # - key: "karpenter.k8s.aws/instance-generation"
+      #   operator: Gt
+      #   values: ["2"]
+      # # Instance category (first letter)
+      # - key: "node.kubernetes.io/instance-category"
+      #   operator: In
+      #   values: ["g"]
       # Instance memory (in mebibytes)
       - key: "karpenter.k8s.aws/instance-memory"
         operator: Gt
         values: ["8191"]
-      # Instance type
-      - key: "node.kubernetes.io/instance-type"
+      - key: "karpenter.k8s.aws/instance-family"
         operator: In
-        values: ["g6.2xlarge", "g5.xlarge", "g4dn.xlarge"]
+        values: ["g4dn", "g5", "g6", "g6e", "gr"]
+      # # Instance type
+      # - key: "node.kubernetes.io/instance-type"
+      #   operator: In
+      #   values: ["g6.2xlarge", "g5.xlarge", "g4dn.xlarge"]

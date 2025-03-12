@@ -1,3 +1,21 @@
+resource "kubernetes_namespace" "monitoring" {
+  metadata {
+    name = var.monitoring_namespace
+  }
+}
+
+# Karpenter monitoring requires the Prometheus Operator CRDs
+resource "helm_release" "prometheus_operator_crds" {
+  namespace        = var.monitoring_namespace
+  name             = "prometheus-operator-crds"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  chart            = "prometheus-operator-crds"
+  version          = "~> 14.0.0"
+  create_namespace = false
+  wait             = true
+}
+
+
 # Amazon Managed Service for Grafana
 module "managed_grafana" {
   source = "terraform-aws-modules/managed-service-grafana/aws"
@@ -48,43 +66,59 @@ resource "aws_prometheus_workspace" "cloudpipe" {
 }
 
 
-# resource "helm_release" "aws-for-fluent-bit" {
-#   name             = "aws-for-fluent-bit"
-#   repository       = "https://aws.github.io/eks-charts"
-#   chart            = "aws-for-fluent-bit"
-#   namespace        = "monitoring"
-#   create_namespace = true
-#   cleanup_on_fail  = true
-#   recreate_pods    = true
+resource "helm_release" "aws-for-fluent-bit" {
+  name             = "aws-for-fluent-bit"
+  repository       = "https://aws.github.io/eks-charts"
+  chart            = "aws-for-fluent-bit"
+  namespace        = var.monitoring_namespace
+  create_namespace = false
+  cleanup_on_fail  = true
+  recreate_pods    = true
 
-#   values = [
-#     templatefile("${path.module}/helm-values/aws-for-fluent-bit/aws-for-fluent-bit-values.yaml",
-#       {
-#         # MUST hardcore the region below - using a variable causes it to be blank???
-#         region               = "us-east-2"
-#         cloudwatch_log_group = "/${var.name}/aws-fluentbit-logs"
-#         s3_bucket_name       = "brave-logs"
-#         cluster_name         = module.eks.cluster_name
-#     })
-#   ]
-# }
+  values = [
+    templatefile("${path.module}/helm-values/aws-for-fluent-bit/aws-for-fluent-bit-values.yaml",
+      {
+        # MUST hardcore the region below - using a variable causes it to be blank???
+        region               = "us-east-2"
+        cloudwatch_log_group = "/${var.name}/aws-fluentbit-logs"
+        s3_bucket_name       = "brave-logs"
+        cluster_name         = module.eks.cluster_name
+    })
+  ]
+}
 
-resource "helm_release" "aws-observability" {
-  name             = "amazon-cloudwatch"
-  repository       = "https://aws-observability.github.io/helm-charts"
-  chart            = "amazon-cloudwatch-observability"
-  namespace        = "amazon-cloudwatch"
-  create_namespace = true
+resource "helm_release" "aws-cloudwatch-metrics" {
+  name             = "aws-cloudwatch-metrics"
+  repository       = "https://aws.github.io/eks-charts"
+  chart            = "aws-cloudwatch-metrics"
+  namespace        = var.monitoring_namespace
+  create_namespace = false
+  cleanup_on_fail  = true
+  recreate_pods    = true
 
   set {
     name  = "clusterName"
-    value = var.name
-  }
-  set {
-    name  = "region"
-    value = local.region
+    value = module.eks.cluster_name
   }
 }
+
+
+# resource "helm_release" "aws-observability" {
+#   name             = "amazon-cloudwatch"
+#   repository       = "https://aws-observability.github.io/helm-charts"
+#   chart            = "amazon-cloudwatch-observability"
+#   namespace        = "amazon-cloudwatch"
+#   create_namespace = true
+
+#   set {
+#     name  = "clusterName"
+#     value = var.name
+#   }
+#   set {
+#     name  = "region"
+#     value = local.region
+#   }
+# }
 
 # module "eks_container_insights" {
 #   source                                     = "github.com/aws-observability/terraform-aws-observability-accelerator//modules/eks-container-insights"
@@ -95,187 +129,68 @@ resource "helm_release" "aws-observability" {
 #   create_cloudwatch_application_signals_role = true
 # }
 
-# data "aws_iam_policy" "cloudwatch_agent_server" {
-#   arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-# }
+data "aws_iam_policy" "cloudwatch_agent_server" {
+  arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
 
-# data "aws_iam_policy" "amp_remote_write_access" {
-#   arn = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
-# }
+data "aws_iam_policy" "amp_remote_write_access" {
+  arn = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
+}
 
 # data "aws_iam_policy" "xray_write_access" {
 #   arn = "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
 # }
 
-# module "irsa-adot-collector" {
-#   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-#   version = "5.52.2"
+module "irsa-adot-collector" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version = "5.52.2"
 
-#   create_role  = true
-#   role_name    = "opentelemetry-operator"
-#   provider_url = module.eks.cluster_oidc_issuer_url
+  create_role  = true
+  role_name    = "opentelemetry-operator"
+  provider_url = module.eks.cluster_oidc_issuer_url
 
-#   role_policy_arns = [
-#     data.aws_iam_policy.cloudwatch_agent_server.arn,
-#     data.aws_iam_policy.amp_remote_write_access.arn
-#   ]
-#   oidc_fully_qualified_subjects = ["system:serviceaccount:opentelemetry-operator-system:opentelemetry-operator"]
-# }
+  role_policy_arns = [
+    data.aws_iam_policy.cloudwatch_agent_server.arn,
+    data.aws_iam_policy.amp_remote_write_access.arn
+  ]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:opentelemetry-operator-system:opentelemetry-operator"]
+}
 
-# module "irsa-adot-col-prom-metrics" {
-#   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-#   version = "5.52.2"
+module "amp_iamproxy_ingest_role" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.22"
 
-#   create_role  = true
-#   role_name    = "adot-col-prom-metrics"
-#   provider_url = module.eks.cluster_oidc_issuer_url
+  role_name                                       = "amp-iamproxy-ingest-role"
+  attach_amazon_managed_service_prometheus_policy = true
 
-#   role_policy_arns = [
-#     data.aws_iam_policy.cloudwatch_agent_server.arn,
-#     data.aws_iam_policy.amp_remote_write_access.arn
-#   ]
-#   oidc_fully_qualified_subjects = ["system:serviceaccount:opentelemetry-operator-system:adot-col-prom-metrics"]
-# }
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["opentelemetry-operator-system:amp-iamproxy-ingest-role"]
+    }
+  }
+}
 
-# module "irsa-adot-col-otlp-ingest" {
-#   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-#   version = "5.52.2"
+data "aws_eks_addon_version" "adot" {
+  addon_name         = "adot"
+  kubernetes_version = var.kubernetes_version
+  most_recent        = true
+}
 
-#   create_role  = true
-#   role_name    = "adot-col-otlp-ingest"
-#   provider_url = module.eks.cluster_oidc_issuer_url
+resource "aws_eks_addon" "adot" {
+  cluster_name             = module.eks.cluster_name
+  addon_name               = "adot"
+  addon_version            = data.aws_eks_addon_version.adot.version
+  service_account_role_arn = module.irsa-adot-collector.iam_role_arn
+  # i.e., 'preserve' the custom value
+  resolve_conflicts_on_update = "OVERWRITE"
+}
 
-#   role_policy_arns = [
-#     data.aws_iam_policy.xray_write_access.arn
-#   ]
-#   oidc_fully_qualified_subjects = ["system:serviceaccount:opentelemetry-operator-system:adot-col-otlp-ingest"]
-# }
-
-# module "irsa-adot-col-container-logs" {
-#   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-#   version = "5.52.2"
-
-#   create_role  = true
-#   role_name    = "adot-col-container-logs"
-#   provider_url = module.eks.cluster_oidc_issuer_url
-
-#   role_policy_arns = [
-#     data.aws_iam_policy.cloudwatch_agent_server.arn
-#   ]
-#   oidc_fully_qualified_subjects = ["system:serviceaccount:opentelemetry-operator-system:adot-col-container-logs"]
-# }
-
-# module "adot_pod_identity" {
-#   source  = "terraform-aws-modules/eks-pod-identity/aws"
-#   version = "1.4.0"
-
-#   name = "adot-collector-pod-identity"
-
-#   # attach_custom_policy = true
-#   additional_policy_arns = {
-#     CloudWatchAgentServerPolicy       = data.aws_iam_policy.cloudwatch_agent_server.arn,
-#     AmazonPrometheusRemoteWriteAccess = data.aws_iam_policy.amp_remote_write_access.arn,
-#     AWSXrayWriteOnlyAccess            = data.aws_iam_policy.xray_write_access.arn
-#   }
-
-#   associations = {
-#     main = {
-#       cluster_name    = module.eks.cluster_name
-#       namespace       = "monitoring"
-#       service_account = "adot-collector"
-#     }
-#   }
-# }
-
-# data "aws_eks_addon_version" "adot" {
-#   addon_name         = "adot"
-#   kubernetes_version = var.kubernetes_version
-#   most_recent        = true
-# }
-
-# resource "aws_eks_addon" "adot" {
-#   cluster_name             = module.eks.cluster_name
-#   addon_name               = "adot"
-#   addon_version            = data.aws_eks_addon_version.adot.version
-#   service_account_role_arn = module.irsa-adot-collector.iam_role_arn
-#   # i.e., 'preserve' the custom value
-#   resolve_conflicts_on_update = "OVERWRITE"
-#   configuration_values = jsonencode({
-#     manager = {
-#       env = {
-#       }
-#     },
-#     collector = {
-#       prometheusMetrics = {
-#         resources = {
-#           limits = {
-#             cpu    = "1000m",
-#             memory = "750Mi"
-#           },
-#           requests = {
-#             cpu    = "300m",
-#             memory = "512Mi"
-#           }
-#         },
-#         serviceAccount = {
-#           annotations = {
-#             "eks.amazonaws.com/role-arn" = module.irsa-adot-col-prom-metrics.iam_role_arn
-#           }
-#         },
-#         pipelines = {
-#           metrics = {
-#             amp = {
-#               enabled = true
-#             },
-#             emf = {
-#               enabled = true
-#             }
-#           }
-#         },
-#         exporters = {
-#           prometheusremotewrite = {
-#             endpoint = "${aws_prometheus_workspace.cloudpipe.prometheus_endpoint}api/v1/remote_write"
-#           }
-#         }
-#       },
-#       otlpIngest = {
-#         resources = {
-#           limits = {
-#             cpu    = "1000m",
-#             memory = "750Mi"
-#           },
-#           requests = {
-#             cpu    = "300m",
-#             memory = "512Mi"
-#           }
-#         },
-#         serviceAccount = {
-#           annotations = {
-#             "eks.amazonaws.com/role-arn" = module.irsa-adot-col-otlp-ingest.iam_role_arn
-#           }
-#         },
-#         pipelines = {
-#           traces = {
-#             xray = {
-#               enabled = true
-#             }
-#           }
-#         }
-#       },
-#       containerLogs = {
-#         serviceAccount = {
-#           annotations = {
-#             "eks.amazonaws.com/role-arn" = module.irsa-adot-col-container-logs.iam_role_arn
-#           }
-#         },
-#         pipelines = {
-#           logs = {
-#             cloudwatchLogs = {
-#               enabled = true
-#             }
-#           }
-#         }
-#       }
-#     }
+# resource "kubectl_manifest" "otel_collector" {
+#   yaml_body = templatefile("${path.module}/yamls/adot/otel-collector-prometheus.yaml",
+#     {
+#       region              = var.region
+#       amp_remotewrite_url = "${aws_prometheus_workspace.cloudpipe.prometheus_endpoint}api/v1/remote_write"
+#       namespace           = var.monitoring_namespace
 #   })
 # }

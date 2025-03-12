@@ -202,6 +202,11 @@ variable "karpenter_namespace" {
 # SQS Queue Variables #
 #######################
 
+variable "argo_events_sa" {
+  type    = string
+  default = "events-sa"
+}
+
 
 
 variable "grafana_region" {
@@ -216,4 +221,11 @@ variable "operator_chart_version" {
   type        = string
   # renovate-helm: depName=opentelemetry-operator registryUrl=https://open-telemetry.github.io/opentelemetry-helm-charts
   default = "0.68.1"
+}
+
+
+variable "monitoring_namespace" {
+  description = "Namespace for monitoring services"
+  type        = string
+  default     = "monitoring"
 }

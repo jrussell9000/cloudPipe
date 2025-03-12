@@ -10,16 +10,3 @@ spec:
       replicas: 3
       # Optional, authen strategy, "none" or "token", defaults to "none"
       auth: token
-#      containerTemplate:
-#        resources:
-#          requests:
-#            cpu: "10m"
-#      metricsContainerTemplate:
-#        resources:
-#          requests:
-#            cpu: "10m"
-#      antiAffinity: false
-#      persistence:
-#        storageClassName: gp3
-#        accessMode: ReadWriteOnce
-#        volumeSize: 10Gi

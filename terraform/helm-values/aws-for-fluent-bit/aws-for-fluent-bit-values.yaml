@@ -63,6 +63,16 @@ cloudWatchLogs:
   extraOutputs: |
     log_key               log
 
+cloudWatch:
+  enabled: true
+  match: "*cloudpipe*"
+  region: "us-east-2"
+  logGroupName: "/cloudpipe-logs"
+  logKey: log
+  logFormat:
+  autoCreateGroup: true
+  # extraOutputs: |
+  #   ...
 #----------------------------------------------------------#
 # OUTPUT logs to S3
 #----------------------------------------------------------#
