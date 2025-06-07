@@ -1,0 +1,124 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: test-workflow
+  namespace: argo-workflows
+spec:
+  archiveLogs: true
+
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+  entrypoint: dag-template
+  templates:
+  - name: dag-template
+    dag:
+      tasks: 
+      - name: pull-inputs
+        template: pull-inputs
+      - name: artifact-check-dagtask
+        template: artifact-check
+      - name: fastsurfer-long-template-creation-dagtask
+        template: fastsurfer-long-template-creation
+        dependencies:
+          - artifact-check-dagtask
+        arguments:
+          parameters:
+          - name: timelist
+            value: '{{tasks.artifact-check-dagtask.outputs.result}}'
+
+
+
+  - name: artifact-check
+    inputs:
+      artifacts: 
+      - name: T1w_Y1
+        # Container path where the output will be saved
+        path: /home/nonroot/{{workflow.parameters.subjID}}_Time1.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/Time1/anat/{{workflow.parameters.subjID}}_Time1.nii'
+
+      - name: T1w_Y2
+        path: /home/nonroot/{{workflow.parameters.subjID}}_Time2.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/Time2/anat/{{workflow.parameters.subjID}}_Time2.nii'
+
+      - name: T1w_Y3
+        path: /home/nonroot/{{workflow.parameters.subjID}}_Time3.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/Time3/anat/{{workflow.parameters.subjID}}_Time3.nii'
+
+      - name: T1w_Y4
+        path: /home/nonroot/{{workflow.parameters.subjID}}_Time4.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/Time4/anat/{{workflow.parameters.subjID}}_Time4.nii'
+
+      - name: T1w_Y5
+        path: /home/nonroot/{{workflow.parameters.subjID}}_Time5.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/Time5/anat/{{workflow.parameters.subjID}}_Time5.nii'
+
+    script:
+      image: python:alpine3.21
+      command: [python]
+      source: |
+        from pathlib import Path
+        import json
+        timelist = [T1.name.split('_')[1] for T1 in Path('/home/nonroot').rglob('*_T1w.nii')]
+        print(json.dumps(timelist))
+
+  - name: template-creation
+    inputs:
+      parameters:
+        - name: timelist
+        - name: T1w_Y2_exists
+          value: '{{=inputs.parameters.timelist =~ "Time2" ? inputs.artifacts.T1w_Y2.path : nil}}'
+
+    # Files going out...
+    outputs:
+      artifacts:
+      - name: template-output
+        path: /home/nonroot/work/{{workflow.parameters.subjID}}/
+        s3:
+          # Workflows will automatically compress the output artifact, but we need to manually add the .tar.gz
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/'
+        # Keeping output compression on allows us to retain symbolic links, which aren't allowed on S3
+        archive:
+          none: {}
+    
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-gpu-nodepool
+
+    container:
+      imagePullPolicy: IfNotPresent
+      # Using a modded FastSurfer image that explicitly adds the nonroot user, as seems to be required by containerd/Argo
+      # Using an AWS ECR repository (vs. Dockerhub) modestly reduces time to pod initialization
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
+      resources:
+        requests:
+          memory: 16Gi
+          cpu: 4000m
+        limits:
+          nvidia.com/gpu: '1'
+      command:
+        - 'multipletimepointcommand.sh'
+      args:
+        - '--tid'
+        - '{{workflow.parameters.subjID}}'
+        - '--t1s'
+        - '{{inputs.artifacts.T1w_Y1.path}}'
+        - '{{inputs.parameters.T1w_Y2.path}}'
+        - '--tpids'
+        - 'Time1'
+        - 'Time2'
+        - 'Time3'
+        - '--sd'
+        - '/home/nonroot/work'
+

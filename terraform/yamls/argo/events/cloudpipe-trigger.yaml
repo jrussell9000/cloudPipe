@@ -5,7 +5,7 @@ metadata:
   namespace: argo-events
 spec:
   template:
-    serviceAccountName: operate-workflow-sa
+    serviceAccountName: argo-events-handler-sa
   dependencies:
     - name: sqs-source
       eventSourceName: aws-sqs
@@ -29,12 +29,10 @@ spec:
               spec:
                 arguments:
                   parameters:
-                  - name: ndaGUIDses
+                  - name: ndaGUID
                     value: ""
-                  - name: miNDARpkgID
-                    value: "1232648"
                 workflowTemplateRef:
-                  name: cloudpipe-master-workflow-template
+                  name: cloudpipe-long-master-workflow-template
           parameters:
           - src:
               dependencyName: sqs-source

@@ -1,0 +1,29 @@
+
+# Created by cross referencing the information here: https://medium.com/kotaicode/aws-iam-roles-for-kubernetes-pods-in-eks-5fdbb2df4ed0
+# with the values available on the OIDC identity provider page (IAM > Identity Providers > )
+
+# IAM Role for Fluent Bit Service Account (IRSA)
+resource "aws_iam_role" "fluent_bit_role" {
+  name        = "${var.name}-${var.fluent_bit_service_account_name}-role"
+  description = "IAM role for Fluent Bit service account on EKS cluster ${var.name}"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = "${module.eks.oidc_provider_arn}"
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            # Compare the OIDC audience claim to ensure it's for this service account
+            "${module.eks.oidc_provider}:sub" = "system:serviceaccount:${var.fluent_bit_namespace}:${var.fluent_bit_service_account_name}"
+            # Optional but recommended: Restrict audience claim
+            "${module.eks.oidc_provider}:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}

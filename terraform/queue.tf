@@ -1,17 +1,23 @@
 
 # https://raw.githubusercontent.com/awslabs/data-on-eks/f94cebb6424ddcac0918730296b068098505aaaa/schedulers/terraform/argo-workflow/spark-team.tf
 
-resource "kubernetes_namespace" "argo_events" {
+#---------------------------------------------------------------
+# Argo Events
+#---------------------------------------------------------------
+
+# Create the Argo Events namespace
+resource "kubernetes_namespace_v1" "argo_events" {
   metadata {
     name = var.argo_events_namespace
   }
 }
 
+# Install Argo Events
 resource "helm_release" "argo_events" {
   name             = "argo-events"
   repository       = "https://argoproj.github.io/argo-helm"
   chart            = "argo-events"
-  namespace        = var.argo_events_namespace
+  namespace        = kubernetes_namespace_v1.argo_events.metadata[0].name
   version          = "~>2.4.0"
   create_namespace = false
   wait             = true
@@ -19,13 +25,10 @@ resource "helm_release" "argo_events" {
     file("${path.module}/helm-values/argo/events/argo-events-values.yaml")
   ]
 
-  depends_on = [kubernetes_namespace.argo_events]
+  depends_on = [kubernetes_namespace_v1.argo_events]
 }
 
-#---------------------------------------------------------------
-# IRSA for Argo events to read and send SQS
-#---------------------------------------------------------------
-
+# Permissions necessary to read/send to/from SQS
 data "aws_iam_policy_document" "sqs_argo_events" {
   statement {
     sid       = "AllowReadingAndSendingSQSfromArgoEvents"
@@ -52,30 +55,7 @@ resource "aws_iam_policy" "sqs_argo_events" {
   policy      = data.aws_iam_policy_document.sqs_argo_events.json
 }
 
-resource "kubernetes_service_account_v1" "event_sa" {
-  metadata {
-    name        = var.argo_events_sa
-    namespace   = var.argo_events_namespace
-    annotations = { "eks.amazonaws.com/role-arn" : module.irsa_argo_events.iam_role_arn }
-  }
-  automount_service_account_token = true
-  depends_on                      = [kubernetes_namespace.argo_events]
-}
-
-resource "kubernetes_secret_v1" "event_sa" {
-  metadata {
-    name      = "${var.argo_events_sa}-secret"
-    namespace = var.argo_events_namespace
-    annotations = {
-      "kubernetes.io/service-account.name"      = kubernetes_service_account_v1.event_sa.metadata[0].name
-      "kubernetes.io/service-account.namespace" = var.argo_events_namespace
-    }
-  }
-  type = "kubernetes.io/service-account-token"
-
-  depends_on = [kubernetes_namespace.argo_events]
-}
-
+# Create an IRSA for Argo Events
 module "irsa_argo_events" {
   source         = "aws-ia/eks-blueprints-addon/aws"
   version        = "~> 1.0"
@@ -89,14 +69,45 @@ module "irsa_argo_events" {
     this = {
       provider_arn    = module.eks.oidc_provider_arn
       namespace       = var.argo_events_namespace
-      service_account = var.argo_events_sa
+      service_account = var.argo_events_handler_sa
     }
   }
 
-  depends_on = [kubernetes_namespace.argo_events,
+  depends_on = [kubernetes_namespace_v1.argo_events,
   aws_iam_policy.sqs_argo_events]
 }
 
+# Create a service account for Argo Events and annotate it with the arn of the IRSA created above
+resource "kubernetes_service_account_v1" "argo_events_handler_sa" {
+  metadata {
+    name        = var.argo_events_handler_sa
+    namespace   = var.argo_events_namespace
+    annotations = { "eks.amazonaws.com/role-arn" : module.irsa_argo_events.iam_role_arn }
+  }
+  automount_service_account_token = true
+  depends_on                      = [kubernetes_namespace_v1.argo_events]
+}
+
+# ???
+resource "kubernetes_secret_v1" "event_sa" {
+  metadata {
+    name      = "${var.argo_events_handler_sa}-secret"
+    namespace = var.argo_events_namespace
+    annotations = {
+      "kubernetes.io/service-account.name"      = kubernetes_service_account_v1.argo_events_handler_sa.metadata[0].name
+      "kubernetes.io/service-account.namespace" = kubernetes_namespace_v1.argo_events.metadata[0].name
+    }
+  }
+  type = "kubernetes.io/service-account-token"
+
+  depends_on = [kubernetes_namespace_v1.argo_events]
+}
+
+#---------------------------------------------------------------
+# SQS
+#---------------------------------------------------------------
+
+# Creating a job queue for the workflow
 resource "aws_sqs_queue" "job_queue" {
   name                        = "${var.name}-jobqueue.fifo"
   fifo_queue                  = true
@@ -112,23 +123,71 @@ resource "kubectl_manifest" "argo-events-eventbus" {
 # Install event source for AWS SQS
 resource "kubectl_manifest" "argo-events-sqs-eventsource" {
   yaml_body = templatefile("${path.module}/yamls/argo/events/eventsource-sqs.yaml", {
-    event_sa   = kubernetes_service_account_v1.event_sa.metadata[0].name
+    event_sa   = kubernetes_service_account_v1.argo_events_handler_sa.metadata[0].name
     queue_name = aws_sqs_queue.job_queue.name
     region     = local.region
+    endpoint   = aws_sqs_queue.job_queue.url
   })
   depends_on = [helm_release.argo_events]
 }
 
-# Create an RBAC service account for the sensor
-resource "kubectl_manifest" "argo-events-sensor-rbac" {
-  yaml_body  = file("${path.module}/yamls/argo/events/sensor-rbac.yaml")
-  depends_on = [helm_release.argo_events]
+resource "kubernetes_cluster_role_v1" "argo-events-handler" {
+  metadata {
+    name = "argo-events-handler-cluster-role"
+  }
+  rule {
+    api_groups = ["argoproj.io"]
+    resources  = ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
+    verbs      = ["*"]
+  }
+}
+
+resource "kubernetes_role_binding_v1" "argo-events-handler-argo-events" {
+  metadata {
+    name      = "argo-events-handler-role-binding-argo-events"
+    namespace = "argo-events"
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role_v1.argo-events-handler.metadata[0].name
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account_v1.argo_events_handler_sa.metadata[0].name
+    namespace = "argo-events"
+    api_group = ""
+  }
+}
+
+resource "kubernetes_role_binding_v1" "argo-events-handler-argo-workflows" {
+  metadata {
+    name      = "argo-events-handler-role-binding-argo-workflows"
+    namespace = "argo-workflows"
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role_v1.argo-events-handler.metadata[0].name
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account_v1.argo_events_handler_sa.metadata[0].name
+    namespace = "argo-events"
+    api_group = ""
+  }
 }
 
 # Create an Argo Event Sensor to trigger workflows
 # Need to use templatefile here because the values are hardcoded
 resource "kubectl_manifest" "argo-events-sensor" {
-  yaml_body  = file("${path.module}/yamls/argo/events/cloudpipe-trigger.yaml")
-  depends_on = [kubectl_manifest.argo-events-sensor-rbac]
+  yaml_body = templatefile("${path.module}/yamls/argo/events/cloudpipe-trigger.yaml",
+    {
+      argoworkflows_ns = var.argo_workflows_namespace
+      workflow2trigger = var.argo_workflows_workflow2trigger
+  })
+  depends_on = [kubernetes_cluster_role_v1.argo-events-handler,
+    kubernetes_role_binding_v1.argo-events-handler-argo-events,
+  kubernetes_role_binding_v1.argo-events-handler-argo-workflows]
 }
 

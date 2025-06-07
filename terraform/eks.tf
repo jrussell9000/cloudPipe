@@ -10,8 +10,11 @@ module "eks" {
   cluster_name    = var.name
   cluster_version = var.kubernetes_version
 
-  # Enable public access to the cluster endpoint and grant admin permissions to the cluster creator
-  cluster_endpoint_public_access           = true
+  # see: https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html
+  cluster_endpoint_public_access  = true
+  cluster_endpoint_private_access = true
+
+  # Add the cluster creator account as an administrator
   enable_cluster_creator_admin_permissions = true
 
   # VPC and subnets where the EKS cluster will be created
@@ -23,33 +26,14 @@ module "eks" {
 
   # Disable creation of CloudWatch log group
   create_cloudwatch_log_group = false
-  # We'll use the cluster security group when setting up FSX
-  create_cluster_security_group = true
-  cluster_security_group_additional_rules = {
-    default_ingress = {
-      cidr_blocks = ["0.0.0.0/0"]
-      description = "Allow all ingress traffic"
-      from_port   = 0
-      to_port     = 0
-      protocol    = "all"
-      type        = "ingress"
-    },
-    default_egress = {
-      cidr_blocks = ["0.0.0.0/0"]
-      description = "Allow all egress traffic"
-      from_port   = 0
-      to_port     = 0
-      protocol    = "all"
-      type        = "egress"
-    }
-  }
 
-  # Turn off the node security group - unnecessary for now
-  create_node_security_group = false
+  create_node_security_group    = false
+  create_cluster_security_group = false
 
   # Define minimally required cluster add-ons
   cluster_addons = {
     coredns = {
+      most_recent = true
       configuration_values = jsonencode({
         tolerations = [
           # Allow CoreDNS to run on the same nodes as the Karpenter controller
@@ -69,7 +53,19 @@ module "eks" {
       most_recent = true
     }
     vpc-cni = {
-      most_recent = true
+      before_compute = true
+      most_recent    = true
+      configuration_values = jsonencode({
+        env = {
+          ENABLE_POD_ENI                    = "true"
+          ENABLE_PREFIX_DELEGATION          = "true"
+          POD_SECURITY_GROUP_ENFORCING_MODE = "standard"
+        }
+        nodeAgent = {
+          enablePolicyEventLogs = "true"
+        }
+        enableNetworkPolicy = "true"
+      })
     }
   }
 
@@ -79,11 +75,16 @@ module "eks" {
     backend = {
       name           = "backend"
       instance_types = ["m5.xlarge"]
-      min_size       = 1
-      max_size       = 5
-      desired_size   = 1
+
+      min_size     = 1
+      max_size     = 5
+      desired_size = 1
+
+      use_name_prefix          = false
+      iam_role_name            = "${var.name}-backend-nodegroup-default"
+      iam_role_use_name_prefix = false
     }
-    # Will hold karpenter processes
+    # Will host the Karpenter controller
     karpenter = {
       name           = "karpenter"
       ami_type       = "AL2023_x86_64_STANDARD"
@@ -92,6 +93,10 @@ module "eks" {
       min_size     = 1
       max_size     = 3
       desired_size = 1
+
+      use_name_prefix          = false
+      iam_role_name            = "${var.name}-karpentercontroller-nodegroup-default"
+      iam_role_use_name_prefix = false
 
       labels = {
         # Used to ensure Karpenter runs on nodes that it does not manage
@@ -120,6 +125,11 @@ module "eks" {
       min_size     = 1
       max_size     = 3
       desired_size = 1
+
+      use_name_prefix          = false
+      iam_role_name            = "${var.name}-gpuoperator-nodegroup-default"
+      iam_role_use_name_prefix = false
+
       # GPU-Operator requires a sizable root volume to hold the CUDA files
       ebs_optimized = true
       block_device_mappings = {
@@ -131,7 +141,6 @@ module "eks" {
           }
         }
       }
-      capacity_type = "SPOT"
 
       labels = {
         "nvidia.com/gpu.deploy.gpu-feature-discovery" = "true"

@@ -123,24 +123,24 @@ variable "argo_workflows_namespace" {
   default = "argo-workflows"
 }
 
-variable "argo_workflows_serverIRSA_name" {
+variable "argo_workflows_server_IRSA_name" {
   type    = string
   default = "argo-workflows-server"
 }
 
-variable "argo_workflows_controllerIRSA_name" {
+variable "argo_workflows_controller_IRSA_name" {
   type    = string
   default = "argo-workflows-controller"
 }
 
 variable "argo_workflows_bucket" {
   type    = string
-  default = "brave-abcd"
+  default = "abcd-working"
 }
 
-variable "argo_workflows_s3accessIRSA_name" {
+variable "argo_workflows_runner_IRSA_name" {
   type    = string
-  default = "argo-workflows-s3access"
+  default = "argo-workflows-runner"
 }
 
 variable "argo_workflows_db_name" {
@@ -184,6 +184,12 @@ variable "argo_workflows_db_table_name" {
   default     = "argo_workflows"
 }
 
+variable "argo_workflows_workflow2trigger" {
+  type        = string
+  description = "The name of the Argo Workflows workflow or workflowtemplate to be triggered by Argo Events."
+  default     = "cloudpipe-long-master-workflow-template"
+}
+
 variable "argo_events_namespace" {
   type    = string
   default = "argo-events"
@@ -202,25 +208,21 @@ variable "karpenter_namespace" {
 # SQS Queue Variables #
 #######################
 
-variable "argo_events_sa" {
+variable "argo_events_handler_sa" {
   type    = string
-  default = "events-sa"
+  default = "argo-events-handler-sa"
 }
-
-
 
 variable "grafana_region" {
   type    = string
   default = "us"
 }
 
-
-
 variable "operator_chart_version" {
   description = "The chart version of opentelemetry-operator to use"
   type        = string
   # renovate-helm: depName=opentelemetry-operator registryUrl=https://open-telemetry.github.io/opentelemetry-helm-charts
-  default = "0.68.1"
+  default = "0.84.0"
 }
 
 
@@ -228,4 +230,48 @@ variable "monitoring_namespace" {
   description = "Namespace for monitoring services"
   type        = string
   default     = "monitoring"
+}
+
+
+variable "grafana_admin_sso_ids" {
+  description = "List of AWS SSO User or Group IDs to assign Grafana Admin role. Required if using AWS_SSO authentication."
+  type        = list(string)
+  default     = ["01dbd590-e041-7037-85a4-31646453ee0a", "e1dbe5a0-d0b1-700d-3fe5-815968958634"]
+}
+
+
+variable "idp_metadata_url" {
+  description = "Link to the identity provider metadata. Retrieved from IAM>Identity Providers>AWSSSO_YYY_DO_NOT_DELETE"
+  type        = string
+  default     = "https://signin.aws.amazon.com/static/saml/SAMLSPAKKH6NNLV8CBP36Z/saml-metadata.xml"
+}
+
+variable "cloudwatch_log_group_name" {
+  description = "Name of the CloudWatch Log Group to create/use for EKS logs."
+  type        = string
+  default     = "/aws/eks/fluentbit-logs/logs" # Example structure
+}
+
+variable "log_retention_days" {
+  description = "Number of days to retain logs in CloudWatch."
+  type        = number
+  default     = 7 # Adjust as needed
+}
+
+variable "fluent_bit_namespace" {
+  description = "Kubernetes namespace to deploy Fluent Bit into."
+  type        = string
+  default     = "amazon-cloudwatch"
+}
+
+variable "fluent_bit_service_account_name" {
+  description = "Name of the Kubernetes Service Account for Fluent Bit."
+  type        = string
+  default     = "fluent-bit"
+}
+
+variable "fluent_bit_image" {
+  description = "Fluent Bit container image to use (AWS optimized version recommended)."
+  type        = string
+  default     = "public.ecr.aws/aws-observability/aws-for-fluent-bit:latest" # Use a specific version in production
 }

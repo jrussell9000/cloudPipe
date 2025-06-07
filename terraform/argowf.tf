@@ -4,7 +4,8 @@
 # Argo Workflows Server IAM Policy
 # https://github.com/open-metadata/openmetadata-deployment/blob/main/terraform/aws/argowf_irsa.tf
 
-resource "kubernetes_namespace" "argo_workflows" {
+# Creating the Argo Workflows namespace
+resource "kubernetes_namespace_v1" "argo_workflows" {
   metadata {
     name = var.argo_workflows_namespace
   }
@@ -14,20 +15,23 @@ resource "kubernetes_namespace" "argo_workflows" {
 # Argo Workflows Database
 #---------------------------------------------------------------
 
+# Generating a random password for the database
 resource "random_password" "argo_workflows_db_password" {
   length           = 16
   special          = true
   override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
-// Create a DB subnet to provision the database. 
+# Creating a DB subnet where we'll provision the database. 
 resource "aws_db_subnet_group" "argo_workflows" {
   subnet_ids = module.vpc.public_subnets
 }
 
+# Creating a security group for the DB and adding appropriate ingress/egress rules
 resource "aws_security_group" "argo_workflows_db" {
   name_prefix = "${var.name}-mysql-sg-"
   vpc_id      = module.vpc.vpc_id
+  description = "Security group containing ingress rule for the Argo Workflows MySQL database."
 
   ingress {
     from_port = 3306
@@ -52,7 +56,7 @@ resource "aws_security_group" "argo_workflows_db" {
   }
 }
 
-# Argo Workflows Database
+# Creating the Argo Workflows database
 resource "aws_db_instance" "argo_workflows_db" {
   allocated_storage = 10
   engine            = "mysql"
@@ -76,10 +80,7 @@ resource "aws_db_instance" "argo_workflows_db" {
   publicly_accessible   = false
 }
 
-#---------------------------------------------------------------
-# Argo Workflows Secrets
-#---------------------------------------------------------------
-
+# Adding the Argo Workflows database access parameters as a new K8s secret (in AWS SecretsManager)
 resource "aws_kms_key" "secrets" {
   enable_key_rotation = true
 }
@@ -143,9 +144,8 @@ resource "kubectl_manifest" "argo_workflows_db_secret" {
           key: ${aws_secretsmanager_secret.argo_workflows_db_secret.name}
   YAML
 
-  depends_on = [kubernetes_namespace.argo_workflows,
+  depends_on = [kubernetes_namespace_v1.argo_workflows,
   aws_secretsmanager_secret.argo_workflows_db_secret]
-
 }
 
 #---------------------------------------------------------------
@@ -153,16 +153,16 @@ resource "kubectl_manifest" "argo_workflows_db_secret" {
 #---------------------------------------------------------------
 
 # Create an IRSA role for the Argo Workflows server
-module "argo_workflows_serverIRSA" {
+module "argo_workflows_server_IRSA" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.22"
 
-  role_name = var.argo_workflows_serverIRSA_name
+  role_name = var.argo_workflows_server_IRSA_name
 
   oidc_providers = {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["${var.argo_workflows_namespace}:${var.argo_workflows_serverIRSA_name}"]
+      namespace_service_accounts = ["${var.argo_workflows_namespace}:${var.argo_workflows_server_IRSA_name}"]
     }
   }
 }
@@ -199,18 +199,61 @@ resource "aws_iam_policy" "argo_workflows_controller" {
 }
 
 # Create an IRSA role for the Argo Workflows controller
-module "argo_workflows_controllerIRSA" {
+module "argo_workflows_controller_IRSA" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.22"
 
-  role_name = var.argo_workflows_controllerIRSA_name
+  role_name = var.argo_workflows_controller_IRSA_name
 
   oidc_providers = {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["${var.argo_workflows_namespace}:${var.argo_workflows_controllerIRSA_name}"]
+      namespace_service_accounts = ["${var.argo_workflows_namespace}:${var.argo_workflows_controller_IRSA_name}"]
     }
   }
+}
+
+# Enabling Argo Workflows metrics by creating a service monitor per the documentation
+# Note: There's an option to enable this in the helm values, but the documentation doesn't mention it(?)
+# Ref: https://argo-workflows.readthedocs.io/en/latest/metrics/#prometheus-scraping
+resource "kubernetes_service" "argo-workflows-controller-metrics" {
+  metadata {
+    name = "argo-workflows-controller-metrics"
+    labels = {
+      app = "workflow-controller"
+    }
+    namespace = "argo-workflows"
+  }
+  spec {
+    selector = {
+      app = "workflow-controller"
+    }
+    port {
+      name        = "metrics"
+      port        = 9090
+      protocol    = "TCP"
+      target_port = 9090
+    }
+    type = "LoadBalancer"
+  }
+}
+
+resource "kubectl_manifest" "argo-workflows-service-monitor" {
+  yaml_body = <<YAML
+    apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    metadata:
+      name: argo-workflows
+      namespace: argo-workflows
+    spec:
+      endpoints:
+      - port: metrics
+      selector:
+        matchLabels:
+          app: workflow-controller
+  YAML
+
+  depends_on = [helm_release.prometheus_crds]
 }
 
 /*************
@@ -222,7 +265,7 @@ module "argo_workflows_controllerIRSA" {
 
 # Create IAM policy for getting bucket location, listing contents, and reading/writing
 
-data "aws_iam_policy_document" "argo_workflows_s3access" {
+data "aws_iam_policy_document" "argo_workflows_runner" {
   statement {
     effect = "Allow"
     actions = [
@@ -250,30 +293,85 @@ data "aws_iam_policy_document" "argo_workflows_s3access" {
   }
 }
 
-resource "aws_iam_policy" "argo_workflows_s3access" {
-  name   = "argo_workflows-s3access-policy"
-  policy = data.aws_iam_policy_document.argo_workflows_s3access.json
+resource "aws_iam_policy" "argo_workflows_runner" {
+  name   = "argo_workflows-runner-policy"
+  policy = data.aws_iam_policy_document.argo_workflows_runner.json
 }
 
 # Create an IRSA role that will be allowed to access the S3 bucket
-module "argo_workflows_s3accessIRSA" {
+module "argo_workflows_runner_IRSA" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.22"
 
-  role_name = var.argo_workflows_s3accessIRSA_name
+  role_name = var.argo_workflows_runner_IRSA_name
 
   # Provide this account read/write access to the S3 bucket
   role_policy_arns = {
-    argos3access = aws_iam_policy.argo_workflows_s3access.arn
+    argorunner = aws_iam_policy.argo_workflows_runner.arn
   }
 
   oidc_providers = {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["${var.argo_workflows_namespace}:${var.argo_workflows_s3accessIRSA_name}"]
+      namespace_service_accounts = ["${var.argo_workflows_namespace}:${var.argo_workflows_runner_IRSA_name}"]
     }
   }
 }
+
+# Helm will create this for us (below)
+# resource "kubernetes_service_account_v1" "argo_workflows_runner" {
+#   metadata {
+#     name      = var.argo_workflows_runner_IRSA_name
+#     namespace = var.argo_workflows_namespace
+#     annotations = {
+#       "eks.amazonaws.com/role-arn" = module.argo_workflows_runner_IRSA.iam_role_arn
+#     }
+#   }
+#   depends_on = [kubernetes_namespace_v1.argo_workflows]
+# }
+
+# Create a role with the necessary permissions for running Argo Workflows
+resource "kubernetes_role_v1" "argo_workflows_runner" {
+  metadata {
+    name      = var.argo_workflows_runner_IRSA_name
+    namespace = var.argo_workflows_namespace
+  }
+
+  rule {
+    api_groups = ["argoproj.io"]
+    resources  = ["workflows", "workflowtemplates"]
+    verbs      = ["*"]
+  }
+
+  depends_on = [kubernetes_namespace_v1.argo_workflows]
+}
+
+# Bind the role to the service account created above (IRSA)
+resource "kubernetes_role_binding_v1" "argo_workflows_runner" {
+  metadata {
+    name      = "${var.argo_workflows_runner_IRSA_name}-role-binding"
+    namespace = var.argo_workflows_namespace
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = var.argo_workflows_runner_IRSA_name
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = var.argo_workflows_runner_IRSA_name
+    namespace = var.argo_workflows_namespace
+  }
+}
+
+# Sleep for 15 seconds to give the blueprints extra time to finish setting up
+resource "time_sleep" "secrets_sleep" {
+  depends_on = [
+    module.eks_blueprints_addons
+  ]
+  create_duration = "15s"
+}
+
 
 /********************
 * Helm Installation *
@@ -285,21 +383,22 @@ module "argo_workflows_s3accessIRSA" {
 resource "helm_release" "argo_workflows_release" {
 
   # Terraform doesn't automagically incorporate these dependencies
-  # (possibly because they're in templatefile?), so they need to be
+  # (possibly because they're referenced in a call to templatefile?), so they need to be
   # added explicitly.
-  depends_on = [module.argo_workflows_serverIRSA,
-    module.argo_workflows_controllerIRSA,
-    module.argo_workflows_s3accessIRSA,
+  depends_on = [module.argo_workflows_server_IRSA,
+    module.argo_workflows_controller_IRSA,
+    module.argo_workflows_runner_IRSA,
     aws_secretsmanager_secret.argo_workflows_db_secret,
     resource.kubectl_manifest.argo_workflows_db_secret,
-    resource.aws_db_instance.argo_workflows_db
+    resource.aws_db_instance.argo_workflows_db,
+    helm_release.prometheus_crds
   ]
   name             = "argo-workflows"
   repository       = "https://argoproj.github.io/argo-helm"
   chart            = "argo-workflows"
   namespace        = "argo-workflows"
   create_namespace = false
-  wait             = true
+  wait             = false
 
   values = [
     templatefile("${path.module}/helm-values/argo/workflows/argo-workflows-values.yaml",
@@ -310,12 +409,12 @@ resource "helm_release" "argo_workflows_release" {
         region                   = var.region
 
         # Specifying the IRSA accounts to use
-        argo_workflows_s3accessIRSA_arn    = module.argo_workflows_s3accessIRSA.iam_role_arn
-        argo_workflows_s3accessIRSA_name   = module.argo_workflows_s3accessIRSA.iam_role_name
-        argo_workflows_controllerIRSA_arn  = module.argo_workflows_controllerIRSA.iam_role_arn
-        argo_workflows_controllerIRSA_name = module.argo_workflows_controllerIRSA.iam_role_name
-        argo_workflows_serverIRSA_arn      = module.argo_workflows_serverIRSA.iam_role_arn
-        argo_workflows_serverIRSA_name     = module.argo_workflows_serverIRSA.iam_role_name
+        argo_workflows_runner_IRSA_arn      = module.argo_workflows_runner_IRSA.iam_role_arn
+        argo_workflows_runner_IRSA_name     = module.argo_workflows_runner_IRSA.iam_role_name
+        argo_workflows_controller_IRSA_arn  = module.argo_workflows_controller_IRSA.iam_role_arn
+        argo_workflows_controller_IRSA_name = module.argo_workflows_controller_IRSA.iam_role_name
+        argo_workflows_server_IRSA_arn      = module.argo_workflows_server_IRSA.iam_role_arn
+        argo_workflows_server_IRSA_name     = module.argo_workflows_server_IRSA.iam_role_name
 
         # Providing connection details for the database
         argo_workflows_db_host        = aws_db_instance.argo_workflows_db.address

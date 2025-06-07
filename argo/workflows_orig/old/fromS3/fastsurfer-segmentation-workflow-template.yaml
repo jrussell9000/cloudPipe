@@ -1,0 +1,66 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: abcd-fastsurfer-segmentation-workflow-template-submittable
+  namespace: argo-workflows
+spec:
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+  templates:
+  - name: fastsurfer-segmentation-template
+
+    # Files coming in...
+    inputs:
+      artifacts:
+      - name: T1w
+        # Container path where the output will be saved
+        path: /home/nonroot/{{workflow.parameters.subjIDses}}_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}/anat/{{workflow.parameters.subjIDses}}_run-01_T1w.nii'
+
+    # Files going out...
+    outputs:
+      artifacts:
+      - name: segmentation-output
+        path: /home/nonroot/work/{{workflow.parameters.subjIDses}}/
+        s3:
+          # Workflows will automatically compress the output artifact, but we need to manually add the .tar.gz
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}'
+        # Keeping output compression on allows us to retain symbolic links, which aren't allowed on S3
+        archive:
+          none: {}
+    
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-gpu-nodepool
+
+    container:
+      imagePullPolicy: IfNotPresent
+      # deepmi/fastsurfer does NOT explicitly add a nonroot user to the image - which seems to be a requirement for containerd
+      # we'll just create a variant that does add the nonroot user (and their user directory)
+      image: public.ecr.aws/w5b6h0h5/fastsurfer:latest
+      resources:
+        requests:
+          memory: 16Gi
+          cpu: 4000m
+        limits:
+          nvidia.com/gpu: '1'
+
+      # Formatting below from https://github.com/argoproj/argo-workflows/blob/main/examples/artifact-path-placeholders.yaml
+      args:
+        - '--t1'
+        - '{{inputs.artifacts.T1w.path}}'
+        - '--sid'
+        - '{{workflow.parameters.subjIDses}}'
+        - '--sd'
+        - /home/nonroot/work
+        - '--seg_only'
+        - '--parallel'
+        - '--3T'
+        - '--threads'
+        - '4'
+        - '--no_cereb'
+        - '--no_biasfield'

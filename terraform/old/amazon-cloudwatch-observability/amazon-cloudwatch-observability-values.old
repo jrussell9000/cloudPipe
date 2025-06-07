@@ -1,0 +1,135 @@
+{
+  "containerLogs": {
+    "enabled": true,
+    "fluentBit": {
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "250Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "25Mi"
+        }
+      },
+      "priorityClassName": "system-node-critical",
+      "config": {
+        "service": "[SERVICE]\n  Flush                     5\n  Grace                     30\n  Log_Level                 error\n  Daemon                    off\n  Parsers_File              parsers.conf\n  storage.path              /var/fluent-bit/state/flb-storage/\n  storage.sync              normal\n  storage.checksum          off\n  storage.backlog.mem_limit 5M\n",
+        "customParsers": "[PARSER]\n  Name                syslog\n  Format              regex\n  Regex               ^(?<time>[^ ]* {1,2}[^ ]* [^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\\/\\.\\-]*)(?:\\[(?<pid>[0-9]+)\\])?(?:[^\\:]*\\:)? *(?<message>.*)$\n  Time_Key            time\n  Time_Format         %b %d %H:%M:%S\n\n[PARSER]\n  Name                container_firstline\n  Format              regex\n  Regex               (?<log>(?<=\"log\":\")\\S(?!\\.).*?)(?<!\\\\)\".*(?<stream>(?<=\"stream\":\").*?)\".*(?<time>\\d{4}-\\d{1,2}-\\d{1,2}T\\d{2}:\\d{2}:\\d{2}\\.\\w*).*(?=})\n  Time_Key            time\n  Time_Format         %Y-%m-%dT%H:%M:%S.%LZ\n\n[PARSER]\n  Name                cwagent_firstline\n  Format              regex\n  Regex               (?<log>(?<=\"log\":\")\\d{4}[\\/-]\\d{1,2}[\\/-]\\d{1,2}[ T]\\d{2}:\\d{2}:\\d{2}(?!\\.).*?)(?<!\\\\)\".*(?<stream>(?<=\"stream\":\").*?)\".*(?<time>\\d{4}-\\d{1,2}-\\d{1,2}T\\d{2}:\\d{2}:\\d{2}\\.\\w*).*(?=})\n  Time_Key            time\n  Time_Format         %Y-%m-%dT%H:%M:%S.%LZ\n",
+        "extraFiles": {
+          "application-log.conf": "[INPUT]\n  Name                tail\n  Tag                 argo-workflows.*\n  Path                /var/log/containers/*cloudpipe-master-workflow*.log\n  multiline.parser    docker, cri\n  DB                  /var/fluent-bit/state/flb_container.db\n  Mem_Buf_Limit       50MB\n  Skip_Long_Lines     On\n  Refresh_Interval    10\n  Rotate_Wait         30\n  storage.type        filesystem\n  Read_from_Head      ${READ_FROM_HEAD}\n\n[FILTER]\n  Name                kubernetes\n  Match               application.*\n  Kube_URL            https://kubernetes.default.svc:443\n  Kube_Tag_Prefix     application.var.log.containers.\n  Merge_Log           On\n  Merge_Log_Key       log_processed\n  K8S-Logging.Parser  On\n  K8S-Logging.Exclude Off\n  Labels              Off\n  Annotations         Off\n  Use_Kubelet         On\n  Kubelet_Port        10250\n  Buffer_Size         0\n  Use_Pod_Association On\n\n[OUTPUT]\n  Name                cloudwatch_logs\n  Match               argo-workflows.*\n  region              ${AWS_REGION}\n  log_group_name      /aws/containerinsights/${CLUSTER_NAME}/argo-workflows\n  log_stream_prefix   ${HOST_NAME}-\n  auto_create_group   true\n  extra_user_agent    container-insights\n  add_entity          true\n"
+        }
+      }
+    }
+  },
+  "manager": {
+    "autoInstrumentationConfiguration": {
+      "python": {
+        "runtime_metrics": {
+          "enabled": true
+        }
+      }
+    },
+    "autoAnnotateAutoInstrumentation": {
+      "python": {
+        "namespaces": [],
+        "deployments": [],
+        "daemonsets": [],
+        "statefulsets": []
+      }
+    },
+    "resources": {
+      "requests": {
+        "cpu": "100m",
+        "memory": "64Mi"
+      }
+    }
+  },
+  "agents": [
+    {
+      "name": "cloudwatch-agent"
+    }
+  ],
+  "agent": {
+    "name": "cloudwatch-agent",
+    "mode": "daemonset",
+    "replicas": 1,
+    "priorityClassName": "system-node-critical",
+    "config": {
+      "logs": {
+        "metrics_collected": {
+          "kubernetes": {
+            "enhanced_container_insights": true,
+            "accelerated_compute_metrics": true
+          },
+          "application_signals": {}
+        }
+      },
+      "traces": {
+        "buffer_size_mb": 3,
+        "concurrency": 8,
+        "insecure": false,
+        "region_override": "us-east-2",
+        "traces_collected": {
+          "xray": {
+            "bind_address": "127.0.0.1:2000",
+            "tcp_proxy": {
+              "bind_address": "127.0.0.1:2000"
+            }
+          },
+            "application_signals": {}
+        }
+      },
+      "metrics": {
+        "metrics_destinations": {
+          "cloudwatch": {},
+          "amp": {
+            "workspace_id": "ws-dd571e94-1968-4ed7-9ed6-fff23190dac1"
+          }
+        },
+        "namespace": "CWAgent",
+        "append_dimensions": {
+          "InstanceId": "${aws:InstanceId}",
+          "InstanceType": "${aws:InstanceId}",
+          "AutoScalingGroupName": "${aws:AutoScalingGroupName}"
+        },
+        "metrics_collected": {
+          "procstat": [
+            {
+              "pattern": "fastsurfer",
+              "measurement": [
+                "cpu_usage",
+                "memory_data",
+                "memory_swap",
+                "num_threads",
+                "read_bytes",
+                "write_bytes"
+              ]
+            }
+          ]
+        }
+      },
+      "force_flush_interval": 60
+    },
+    "prometheus": {
+      "targetAllocator": {
+        "enabled": false,
+        "prometheusCR": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "dcgmExporter": {
+    "resources": {
+      "requests": {
+        "cpu": "250m",
+        "memory": "128Mi"
+      },
+      "limits": {
+        "cpu": "500m",
+        "memory": "500Mi"
+      }
+    }
+  }
+}

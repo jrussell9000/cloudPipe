@@ -15,10 +15,10 @@ workflow:
     # -- Specifies whether a service account should be created
     create: true
     # -- Service account which is used to run workflows
-    name: ${ argo_workflows_s3accessIRSA_name }
+    name: ${ argo_workflows_runner_IRSA_name }
     # -- Annotations applied to created service account
     annotations:
-      eks.amazonaws.com/role-arn: ${ argo_workflows_s3accessIRSA_arn }
+      eks.amazonaws.com/role-arn: ${ argo_workflows_runner_IRSA_arn }
   rbac:
     # -- Adds Role and RoleBinding for the above specified service account to be able to run workflows.
     # A Role and Rolebinding pair is also created for each namespace in controller.workflowNamespaces (see below)
@@ -70,36 +70,44 @@ controller:
 
   # telemetryConfig controls the path and port for prometheus telemetry. Telemetry is enabled and emitted in the same endpoint
   # as metrics by default, but can be overridden using this config.
-  telemetryConfig:
-    # -- Enables prometheus telemetry server
-    enabled: true
+  # telemetryConfig:
+  #   # -- Enables prometheus telemetry server
+  #   enabled: true
 
   # serviceMonitor:
   #   # -- Enable a prometheus ServiceMonitor
   #   enabled: true
-  #   # -- Prometheus ServiceMonitor labels
-  #   additionalLabels: {}
   #   # -- Prometheus ServiceMonitor namespace
-  #   namespace: "monitoring" # "monitoring"
+  #   namespace: "argo-workflows"
 
   serviceAccount:
     # -- Create a service account for the controller
     create: true
     # -- Service account name
-    name: ${ argo_workflows_controllerIRSA_name }
+    name: ${ argo_workflows_controller_IRSA_name }
     # -- Annotations applied to created service account
     annotations:
-      eks.amazonaws.com/role-arn: ${ argo_workflows_controllerIRSA_arn }
+      eks.amazonaws.com/role-arn: ${ argo_workflows_controller_IRSA_arn }
 
   rbac:
     # -- Adds Role and RoleBinding for the controller.
     create: true
 
   # -- Workflow controller name string
-  name: "controller"
+  name: "workflow-controller"
 
+  # -- Specify all namespaces where this workflow controller instance will manage
+  # workflows. This controls where the service account and RBAC resources will
+  # be created. Only valid when singleNamespace is false.
   workflowNamespaces:
     - ${ argo_workflows_namespace }
+
+  # extraEnv:
+  #   - name: OTEL_EXPORTER_OTLP_ENDPOINT
+  #     value: "http://localhost:4317"
+    # - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+    #   value: 
+
 
   tolerations: 
   - key: "CriticalAddonsOnly"
@@ -116,10 +124,10 @@ server:
     # -- Create a service account for the server
     create: true
     # -- Service account name
-    name: ${ argo_workflows_serverIRSA_name }
+    name: ${ argo_workflows_server_IRSA_name }
     annotations:
       # -- Annotations applied to created service account
-      eks.amazonaws.com/role-arn: ${ argo_workflows_serverIRSA_arn }
+      eks.amazonaws.com/role-arn: ${ argo_workflows_server_IRSA_arn }
     rbac:
       create: true
 
@@ -152,6 +160,7 @@ artifactRepository:
   # @default -- See [values.yaml]
   s3:
     bucket: ${ argo_workflows_bucket }
+    # keyFormat: fmriresults01/abcd-mproc-release5
     endpoint: s3.amazonaws.com
     region: ${ region }
     useSDKcreds: true

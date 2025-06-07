@@ -1,18 +1,11 @@
 resource "aws_security_group" "efs" {
   name_prefix = "${var.name}-efs-sg"
   vpc_id      = module.vpc.vpc_id
+  description = "Security group allowing ingress/egress rules required for EFS"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "efs_ingress" {
   security_group_id = aws_security_group.efs.id
-  cidr_ipv4         = var.vpc_cidr
-  from_port         = 2049
-  ip_protocol       = "tcp"
-  to_port           = 2049
-}
-
-resource "aws_vpc_security_group_ingress_rule" "efs_egress" {
-  security_group_id = module.eks.cluster_security_group_id
   cidr_ipv4         = var.vpc_cidr
   from_port         = 2049
   ip_protocol       = "tcp"
@@ -54,12 +47,22 @@ resource "aws_efs_file_system" "this" {
 }
 
 # EFS Mount Points - one in each AZ
-resource "aws_efs_mount_target" "efs_mount_targets_private" {
-  for_each = toset(module.vpc.private_subnets)
-
+resource "aws_efs_mount_target" "efs_mount_targets_private_1" {
   file_system_id  = aws_efs_file_system.this.id
   security_groups = [aws_security_group.efs.id]
-  subnet_id       = each.value
+  subnet_id       = module.vpc.private_subnets[0]
+}
+
+resource "aws_efs_mount_target" "efs_mount_targets_private_2" {
+  file_system_id  = aws_efs_file_system.this.id
+  security_groups = [aws_security_group.efs.id]
+  subnet_id       = module.vpc.private_subnets[1]
+}
+
+resource "aws_efs_mount_target" "efs_mount_targets_private_3" {
+  file_system_id  = aws_efs_file_system.this.id
+  security_groups = [aws_security_group.efs.id]
+  subnet_id       = module.vpc.private_subnets[2]
 }
 
 #---------------------------------------------------------------
@@ -83,14 +86,3 @@ resource "kubectl_manifest" "efs-storage-class" {
     ]
   }
 }
-
-#---------------------------------------------------------------
-# Persistent Volume Claim - FSx for Lustre
-#---------------------------------------------------------------
-# resource "kubectl_manifest" "efs-persistent-volume-claim" {
-#   yaml_body = templatefile("${path.module}/yamls/efs/efs-pvc.yaml", {
-#     namespace = var.argo_workflows_namespace
-#   })
-# }
-
-

@@ -6,6 +6,10 @@ spec:
   disruption:
     consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 30s
+    # A budget of zero nodes will prevent any of those nodes from being considered for voluntary disruption.
+    # see https://karpenter.sh/docs/concepts/disruption/#example-disable-disruption-on-a-nodepool
+    # budgets:
+    # - nodes: "0"
   template:
     spec:
       nodeClassRef:
@@ -17,11 +21,7 @@ spec:
       startupTaints:
         - key: efs.csi.aws.com/agent-not-ready
           effect: NoExecute
-      # A budget of zero nodes will prevent any of those nodes from being considered for voluntary disruption.
-      # see https://karpenter.sh/docs/concepts/disruption/#example-disable-disruption-on-a-nodepool
-      disruption:
-        budgets:
-          - nodes: "0"
+
       requirements:
       # see: https://karpenter.sh/docs/concepts/scheduling/#well-known-labels
       # AMD64
@@ -56,3 +56,4 @@ spec:
       # - key: "node.kubernetes.io/instance-type"
       #   operator: In
       #   values: ["g6.2xlarge", "g5.xlarge", "g4dn.xlarge"]
+

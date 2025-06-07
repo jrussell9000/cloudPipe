@@ -1,0 +1,293 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-agent-conf
+  namespace: aws-otel-eks
+  labels:
+    app: opentelemetry
+    component: otel-agent-conf
+data:
+  otel-agent-config: |
+    extensions:
+      health_check:
+      sigv4auth:
+        region: "${region}"
+        service: "aps"
+
+    receivers:
+      # awscontainerinsightreceiver:
+      #   # all parameters are optional
+      #   collection_interval: 15s
+      #   container_orchestrator: eks
+      #   add_service_as_attribute: true 
+      #   prefer_full_pod_name: false 
+      #   add_full_pod_name_metric_label: false 
+
+      # We're using fluent bit instead of this
+      # filelog:
+      #   include: /var/log/pod/*/*/*.log
+      #   start_at: beginning
+      #   include_file_path: true
+      #   include_file_name: false
+      #   poll_interval: 1s
+      #   operators:
+      #     - type: regex_parser
+      #       regex: ^\\/var\\/log\\/pods\\/(?P<k8s.namespace.name>[^_]+)_(?P<k8s.pod.name>[^_]+)_(?P<k8s.pod.uid>[^/]+)\\/(?P<k8s.container.name>[^/]+)\\/(?P<docker.container.id>[^/]+?)\\.log$
+      #     - type: json_parser
+      #       parse_from: body.log
+      #       if = "body.log != nil && (body.log startsWith '{' || body.log startsWith '[')": preserve_to = "attributes.original_log"
+
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      #
+      # Scrape configuration for the Prometheus Receiver
+      # This is the same configuration used when Prometheus is installed using the community Helm chart
+      # 
+      prometheus:
+        config:
+          global:
+            scrape_interval: 15s
+            scrape_timeout: 10s
+
+          scrape_configs:
+          # - job_name: kubelet-cadvisor
+          #   kubernetes_sd_configs:
+          #   - role: node
+          #   scheme: https
+          #   tls_config:
+          #     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          #     insecure_skip_verify: true
+          #   bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+          #   relabel_configs:
+          #   - action: keep
+          #     source_labels:
+          #       - __meta_kubernetes_node_name 
+          #     regex: (.+)
+          #     replacement: $1
+          #   - replacement: $1:10250
+          #     target_label: __address__
+          #   - source_labels:
+          #     - __meta_kubernetes_node_name
+          #     target_label: instance
+          #   - target_label: __metrics_path__
+          #     replacement: /metrics/cadvisor
+          #   - target_label: job
+          #     replacement: kubelet-cadvisor
+
+          - job_name: kubelet-probes
+            kubernetes_sd_configs:
+            - role: node
+            scheme: https
+            tls_config:
+              ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              insecure_skip_verify: true
+            bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            relabel_configs:
+            - source_labels:
+              - __meta_kubernetes_node_name
+              regex: .+;
+              action: keep
+            - target_label: __address__
+              replacement: $1:10250
+            - source_labels:
+              - __meta_kubernetes_node_name
+              target_label: instance
+            - target_label: __metrics_path__
+              replacement: /metrics/probes
+            - target_label: job
+              replacement: kubelet-probes
+
+          - job_name: kubelet-resource
+            kubernetes_sd_configs:
+            - role: node
+            scheme: https
+            tls_config:
+              ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              insecure_skip_verify: true
+            bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            relabel_configs:
+            - source_labels:
+              - __meta_kubernetes_node_name
+              regex: .+;
+              action: keep
+            - target_label: __address__
+              replacement: $1:10250
+            - source_labels:
+              - __meta_kubernetes_node_name
+              target_label: instance
+            - target_label: __metrics_path__
+              replacement: /metrics/resources
+            - target_label: job
+              replacement: kubelet-resource
+
+          - job_name: karpenter-controller
+            kubernetes_sd_configs:
+            - role: pod
+            relabel_configs:
+              - source_labels:
+                - __meta_kubernetes_pod_label_app_kubernetes_io_instance
+                action: keep
+                regex: karpenter
+              - source_labels:
+                - __meta_kubernetes_pod_container_port_name
+                action: keep
+                regex: http-metrics
+              - source_labels:
+                - __meta_kubernetes_namespace
+                target_label: namespace
+              - source_labels:
+                - __meta_kubernetes_pod_name
+                target_label: pod
+              - source_labels:
+                - __meta_kubernetes_pod_container_name
+                target_label: container
+              - target_label: job
+                replacement: karpenter-controller
+
+          # - job_name: argo-workflows-controller
+          #   kubernetes_sd_configs:
+          #     - role: pod
+          #   relabel_configs:
+          #     - source_labels:
+          #       - __meta_kubernetes_pod_label_app
+          #       action: keep
+          #       regex: workflow-controller
+          #     - source_labels:
+          #       - __address__
+          #       - __meta_kubernetes_pod_annotation_prometheus_io_port
+          #       action: replace
+          #       regex: ([^:]+):(?:\\d+);(\\d+)
+          #       replacement: $1:$2
+          #       target_label: container
+          #     - target_label: job
+          #       replacement: argo-workflow-controller
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 1000
+        spike_limit_mib: 300
+      batch:
+        send_batch_size: 8192
+        timeout: 1s
+      # batch/metrics:
+      #   timeout: 60s
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        extract:
+          metadata:
+          - k8s.pod.name
+          - k8s.pod.uid
+          - k8s.deployment.name
+          - k8s.node.name
+          - k8s.namespace.name
+          - k8s.replicaset.name
+          - k8s.daemonset.name
+          - k8s.statefulset.name
+          - k8s.container.name
+      resource:
+        attributes:
+          - key: aws-region
+            value: ${region}
+            action: upsert
+          - key: aws.ecs.cluster.arn
+            value: ${cluster_name}
+            action: upsert
+          - key: eks.cluster.name
+            value: ${cluster_name}
+            action: upsert
+
+    exporters:
+      debug:
+        verbosity: detailed
+      prometheusremotewrite:
+        endpoint: ${prometheus_endpoint}api/v1/remote_write
+        auth:
+          authenticator: sigv4auth
+      # awsemf:
+      #   namespace: ContainerInsights
+      #   # log_group_name: '/aws/containerinsights/{ClusterName}/performance'
+      #   # log_stream_name: '{NodeName}'
+      #   resource_to_telemetry_conversion:
+      #     enabled: true
+      #   dimension_rollup_option: NoDimensionRollup
+      #   parse_json_encoded_attr_values: [Sources, kubernetes]
+      #   metric_declarations:
+      #     # node metrics
+      #     - dimensions: [[NodeName, InstanceId, ClusterName]]
+      #       metric_name_selectors:
+      #         - node_cpu_utilization
+      #         - node_memory_utilization
+      #         - node_network_total_bytes
+      #         - node_cpu_reserved_capacity
+      #         - node_memory_reserved_capacity
+      #         - node_number_of_running_pods
+      #         - node_number_of_running_containers
+      #     - dimensions: [[ClusterName]]
+      #       metric_name_selectors:
+      #         - node_cpu_utilization
+      #         - node_memory_utilization
+      #         - node_network_total_bytes
+      #         - node_cpu_reserved_capacity
+      #         - node_memory_reserved_capacity
+      #         - node_number_of_running_pods
+      #         - node_number_of_running_containers
+      #         - node_cpu_usage_total
+      #         - node_cpu_limit
+      #         - node_memory_working_set
+      #         - node_memory_limit
+
+      #     # pod metrics
+      #     - dimensions: [[PodName, Namespace, ClusterName], [Service, Namespace, ClusterName], [Namespace, ClusterName], [ClusterName]]
+      #       metric_name_selectors:
+      #         - pod_cpu_utilization
+      #         - pod_memory_utilization
+      #         - pod_network_rx_bytes
+      #         - pod_network_tx_bytes
+      #         - pod_cpu_utilization_over_pod_limit
+      #         - pod_memory_utilization_over_pod_limit
+      #     - dimensions: [[PodName, Namespace, ClusterName], [ClusterName]]
+      #       metric_name_selectors:
+      #         - pod_cpu_reserved_capacity
+      #         - pod_memory_reserved_capacity
+      #     - dimensions: [[PodName, Namespace, ClusterName]]
+      #       metric_name_selectors:
+      #         - pod_number_of_container_restarts
+
+      #     # cluster metrics
+      #     - dimensions: [[ClusterName]]
+      #       metric_name_selectors:
+      #         - cluster_node_count
+      #         - cluster_failed_node_count
+
+      #     # service metrics
+      #     - dimensions: [[Service, Namespace, ClusterName], [ClusterName]]
+      #       metric_name_selectors:
+      #         - service_number_of_running_pods
+
+      #     # node fs metrics
+      #     - dimensions: [[NodeName, InstanceId, ClusterName], [ClusterName]]
+      #       metric_name_selectors:
+      #         - node_filesystem_utilization
+
+      #     # namespace metrics
+      #     - dimensions: [[Namespace, ClusterName], [ClusterName]]
+      #       metric_name_selectors:
+      #         - namespace_number_of_running_pods
+
+    service:
+      extensions: [health_check,sigv4auth]
+      pipelines:
+        # logs:
+        #   receivers: [filelog]
+        #   processors: [memory_limiter,k8sattributes,batch]
+        #   exporters: [prometheusremotewrite]
+        metrics:
+          receivers: [otlp,prometheus]
+          processors: [memory_limiter,k8sattributes,resource,batch]
+          exporters: [prometheusremotewrite,awsemf]

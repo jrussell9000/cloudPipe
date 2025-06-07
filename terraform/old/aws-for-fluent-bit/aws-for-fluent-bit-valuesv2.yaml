@@ -1,0 +1,71 @@
+
+service:
+  parsersFiles:
+    - /fluent-bit/parsers/parsers.conf
+
+input:
+  name: "tail"
+  enabled: true
+  tag: "<namespace_name>.<container_name>.<pod_name>.<docker_id>-"
+  path: "/var/log/containers/*.log"
+  excludePath: "/var/log/containers/*cloudpipe*.log"
+  db: "/var/log/flb_kube.db"
+  multilineParser: "docker, cri"
+  memBufLimit: 5MB
+  skipLongLines: "On"
+  refreshInterval: 10
+  additionalInputs: |
+    [INPUT]
+      Name                        tail
+      Tag                         <pod_name>.<container_name>
+      Path                        /var/log/containers/*cloudpipe*.log
+      DB                          /var/log/cloudpipe.db
+      multiline.parser            docker, cri
+      Buffer_Max_Size             5MB
+      Skip_Long_Lines             On
+      Refresh_Interval            10
+
+filter:
+  name: "kubernetes"
+  match: "*"
+  kubeURL: "https://kubernetes.default.svc.cluster.local:443"
+  mergeLog: "On"
+  mergeLogKey: "log_processed"
+  keepLog: "On"
+  k8sLoggingParser: "On"
+  k8sLoggingExclude: "Off"
+  bufferSize: "32k"
+  extraFilters: |
+    Regex_Parser        kubernetes
+    Use_Kubelet         true
+    Kubelet_Port        10250
+    Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+
+cloudWatchLogs:
+  enabled: true
+  match: "systempods.*"
+  region: ${region}
+  logGroupName: ${cloudwatch_log_group}
+  autoCreateGroup: true
+
+# Resource config for large clusters
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1500Mi
+  requests:
+    cpu: 500m
+    memory: 500Mi
+
+## Assign a PriorityClassName to pods if set
+priorityClassName: system-node-critical
+
+# This toleration allows Daemonset pod to be scheduled on any node, regardless of their Taints.
+tolerations:
+  - operator: Exists
+
+# Set hostNetwork to true and dnsPolicy to ClusterFirstWithHostNet to use Kubelet to get the Metadata for large clusters
+# Check this link for more details https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContainerInsights-use-kubelet.html
+hostNetwork: false
+dnsPolicy: ClusterFirst

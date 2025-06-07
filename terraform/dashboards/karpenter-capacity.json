@@ -1,0 +1,53 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "CPU Capacity vs Usage",
+      "type": "graph",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(karpenter_nodes_total_capacity{resource=\"cpu\"})",
+          "legendFormat": "Total Capacity",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(karpenter_nodes_allocatable{resource=\"cpu\"})",
+          "legendFormat": "Allocatable",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Memory Capacity vs Usage",
+      "type": "graph",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(karpenter_nodes_total_capacity{resource=\"memory\"})",
+          "legendFormat": "Total Capacity",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(karpenter_nodes_allocatable{resource=\"memory\"})",
+          "legendFormat": "Allocatable",
+          "refId": "B"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": ["karpenter"],
+  "title": "Karpenter Capacity",
+  "uid": "karpenter-capacity",
+  "version": 1
+}

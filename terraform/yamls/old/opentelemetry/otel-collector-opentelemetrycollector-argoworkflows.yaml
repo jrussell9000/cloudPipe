@@ -1,0 +1,87 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector-config-argoworkflows
+  namespace: aws-otel-eks
+spec:
+  mode: deployment
+  serviceAccount: aws-otel-sa
+  config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 10s
+        send_batch_size: 1000
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 1500
+        spike_limit_mib: 300
+      resourcedetection:
+        detectors: [env, eks]
+        timeout: 2s
+      attributes:
+        actions:
+          - key: cluster_name
+            value: ${CLUSTER_NAME}
+            action: insert
+      resource:
+        attributes:
+          - key: service.namespace
+            value: "argo-workflows"
+            action: insert
+
+    exporters:
+      otlp:
+        endpoint: "${OTLP_ENDPOINT}"
+        auth:
+          authenticator: sigv4auth
+      awsemf:
+        region: ${AWS_REGION}
+        namespace: ArgoWorkflows
+        log_group_name: "/aws/containerinsights/${CLUSTER_NAME}/metrics"
+        dimension_rollup_option: NoDimensionRollup
+        metric_declarations:
+          - dimensions: [[service.name, k8s.pod.name]]
+            metric_name_selectors:
+              - "workflow.*"
+              - "argo.*"
+
+    extensions:
+      health_check:
+      sigv4auth:
+        region: ${AWS_REGION}
+        service: "aps"
+
+    service:
+      extensions: [health_check, sigv4auth]
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, resourcedetection, attributes, resource]
+          exporters: [otlp, awsemf]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: aws-otel-eks
+spec:
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      protocol: TCP
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      protocol: TCP
+      targetPort: 4318
+  selector:
+    app.kubernetes.io/name: otel-collector-argoworkflows

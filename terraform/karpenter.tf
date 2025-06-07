@@ -19,21 +19,28 @@ module "karpenter" {
     AmazonEC2ContainerRegistryReadOnlyPolicy = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
     AmazonSSMManagedInstanceCore             = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
     CloudWatchAgentServerPolicy              = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+    AmazonPrometheusQueryAccess              = "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess"
+    AmazonPrometheusRemoteWriteAccess        = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
   }
 }
 
+# Install Karpenter and modify default configuration
 # If this returns an access error (e.g., 403 forbidden) - helm registry logout public.ecr.aws && docker logout public.ecr.aws
 resource "helm_release" "karpenter" {
-  name             = "karpenter"
-  namespace        = var.karpenter_namespace
-  create_namespace = true
-  repository       = "oci://public.ecr.aws/karpenter"
-  chart            = "karpenter"
-  version          = "~> 1.0"
-  wait             = false
+  name                = "karpenter"
+  namespace           = var.karpenter_namespace
+  create_namespace    = true
+  repository          = "oci://public.ecr.aws/karpenter"
+  repository_username = data.aws_ecrpublic_authorization_token.token.user_name
+  repository_password = data.aws_ecrpublic_authorization_token.token.password
+  chart               = "karpenter"
+  version             = "1.3.3"
+  wait                = false
 
+  depends_on = [helm_release.prometheus_crds]
   values = [
     <<-EOT
+    replicas: 1
     nodeSelector:
       karpenter.sh/controller: 'true'
     settings:
@@ -48,13 +55,33 @@ resource "helm_release" "karpenter" {
         effect: NoSchedule
     webhook:
       enabled: false
+    serviceMonitor:
+      enabled: true
     EOT
+  ]
+
+  # lifecycle {
+  #   ignore_changes = [
+  #     repository_password
+  #   ]
+  # }
+}
+
+# Adding EC2nodeclasses and nodepools
+resource "kubectl_manifest" "al2023-nodeclass" {
+  yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-nodeclass.yaml",
+    {
+      karpenter_node_iam_role_name = module.karpenter.node_iam_role_name
+      eks_cluster_name             = module.eks.cluster_name
+  })
+
+  depends_on = [
+    helm_release.karpenter
   ]
 }
 
-
-resource "kubectl_manifest" "al2023-nodeclass" {
-  yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-nodeclass.yaml",
+resource "kubectl_manifest" "al2023-storage-heavy-nodeclass" {
+  yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-storage-nodeclass.yaml",
     {
       karpenter_node_iam_role_name = module.karpenter.node_iam_role_name
       eks_cluster_name             = module.eks.cluster_name
@@ -77,8 +104,8 @@ resource "kubectl_manifest" "al2023-gpu-nodepool" {
   ]
 }
 
-resource "kubectl_manifest" "al2023-cpulight-nodepool" {
-  yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-cpulight-nodepool.yaml",
+resource "kubectl_manifest" "al2023-intel-light-nodepool" {
+  yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-intel-light-nodepool.yaml",
     {
       karpenter_node_iam_role_name = module.karpenter.node_iam_role_name
       eks_cluster_name             = module.eks.cluster_name
@@ -89,8 +116,20 @@ resource "kubectl_manifest" "al2023-cpulight-nodepool" {
   ]
 }
 
-resource "kubectl_manifest" "al2023-cpuheavy-nodepool" {
-  yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-cpuheavy-nodepool.yaml",
+resource "kubectl_manifest" "al2023-intel-heavy-nodepool" {
+  yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-intel-heavy-nodepool.yaml",
+    {
+      karpenter_node_iam_role_name = module.karpenter.node_iam_role_name
+      eks_cluster_name             = module.eks.cluster_name
+  })
+
+  depends_on = [
+    helm_release.karpenter
+  ]
+}
+
+resource "kubectl_manifest" "al2023-intel-heavy-storage-nodepool" {
+  yaml_body = templatefile("${path.module}/helm-values/karpenter/al2023-intel-heavy-storage-nodepool.yaml",
     {
       karpenter_node_iam_role_name = module.karpenter.node_iam_role_name
       eks_cluster_name             = module.eks.cluster_name

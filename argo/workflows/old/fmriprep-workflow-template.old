@@ -1,0 +1,323 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: fmriprep-workflow-template
+  generateName: fmriprep-workflow-template-
+  namespace: argo-workflows
+spec:
+  arguments:
+    parameters:
+      - name: ndaGUID
+      - name: subjID
+      - name: session
+      - name: subjidpvc
+
+  entrypoint: fmriprep-template
+  templates:
+  - name: fmriprep-template
+
+    inputs:
+      parameters:
+        - name: ndaGUID
+          value: '{{inputs.parameters.ndaGUID}}'
+        - name: subjID
+          value: '{{inputs.parameters.subjID}}'
+        - name: session
+          value: '{{inputs.parameters.session}}'
+        - name: subjidpvc
+          value: '{{inputs.parameters.subjidpvc}}'
+      
+      artifacts:
+      #--- BIDS Dataset Description ---# (fmriprep will fail to recognize the input if this is missing)
+      - name: dataset-description
+        path: /home/fmriprep/input/dataset_description.json
+        s3:
+          key: 'config/dataset_description.json'
+
+      #--- Freesurfer License ---# (fmriprep uses Freesurfer tools, ergo a license is required)
+      - name: fslicense
+        path: /home/fmriprep/.license
+        s3:
+          key: 'config/fslicense'
+
+      #--- FastSurfer Output ---#
+      # see: https://fmriprep.org/en/stable/usage.html#using-a-previous-run-of-freesurfer
+      # Here we pull in a segmented, parcellated, and within-subjects template aligned anatomical for the specified session
+      # However, fmriprep is expecting a directory name matching the subject ID (NOT the session), so we'll just unpack to that path.
+      # - name: fastsurfer-templated-session
+      #   path: /home/fmriprep/output/sourcedata/freesurfer/{{inputs.parameters.subjID}}
+      #   s3:
+      #     key: 'derivatives/fastsurfer/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}_templated.tar.gz'
+
+      # # fmriprep requires fsaverage to generate cifti output
+      # - name: fsaverage
+      #   path: /home/fmriprep/output/sourcedata/freesurfer/fsaverage
+      #   s3:
+      #     key: 'config/fsaverage'
+
+      #--- Anatomicals ---# (fmriprep uses these for alignment, even if pre-computed Freesurfer derivatives are passed)
+      # T1w
+      ## NIFTI
+      - name: T1w
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/anat/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/anat/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_run-01_T1w.nii'
+      ## JSON
+      - name: T1w-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/anat/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_run-01_T1w.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/anat/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_run-01_T1w.json'
+      
+      # T2w (optional)
+      ## NIFTI
+      - name: T2w
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/anat/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_run-01_T2w.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/anat/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_run-01_T2w.nii'
+        optional: true
+      ## JSON
+      - name: T2w-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/anat/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_run-01_T2w.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/anat/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_run-01_T2w.json'
+        optional: true
+
+      #--- Functionals ---#
+      # Resting State (we'll assume there may be as many as six rsfmri runs)
+      ## Run-01
+      ### NIFTI
+      - name: rest-run-1
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-01_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-01_bold.nii'
+        optional: true
+      ### JSON
+      - name: rest-run-1-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-01_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-01_bold.json'
+        optional: true
+      
+      ## Run-02
+      ### NIFTI
+      - name: rest-run-2
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-02_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-02_bold.nii'
+        optional: true
+      - name: rest-run-2-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-02_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-02_bold.json'
+        optional: true
+      
+      ## Run-03
+      ### NIFTI
+      - name: rest-run-3
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_bold.nii'
+        optional: true
+      ### JSON
+      - name: rest-run-3-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_bold.json'
+        optional: true
+      
+      ## Run-04
+      ### NIFTI
+      - name: rest-run-4
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-04_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-04_bold.nii'
+        optional: true
+      ### JSON
+      - name: rest-run-4-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-04_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-04_bold.json'
+        optional: true
+
+      ## Run-05
+      ### NIFTI
+      - name: rest-run-5
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-05_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-05_bold.nii'
+        optional: true
+      ### JSON
+      - name: rest-run-5-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-05_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-05_bold.json'
+        optional: true
+
+      ## Run-06
+      ### NIFTI
+      - name: rest-run-6
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-06_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-06_bold.nii'
+        optional: true
+      ### JSON
+      - name: rest-run-6-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-06_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-06_bold.json'
+        optional: true
+
+      # N-Back (assuming a possible maximum of four runs)
+
+      ## Run-01
+      ### NIFTI
+      - name: nback-run-1
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_bold.nii'
+        optional: true
+
+      ### JSON
+      - name: nback-run-1-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_bold.json'
+        optional: true
+
+      ## Run-02
+      ### NIFTI
+      - name: nback-run-2
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_bold.nii'
+        optional: true
+      ### JSON
+      - name: nback-run-2-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_bold.json'
+        optional: true
+      
+      ## Run-03
+      ### NIFTI
+      - name: nback-run-3
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_bold.nii'
+        optional: true
+      ### JSON
+      - name: nback-run-3-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_bold.json'
+        optional: true
+
+      ## Run-04
+      ### NIFTI
+      - name: nback-run-4
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_bold.nii'
+        optional: true
+      ### JSON
+      - name: nback-run-4-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_bold.json'
+        optional: true
+
+      # SST
+      ## Run-01
+      ### NIFTI
+      - name: sst-run-1
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-sst_run-01_bold.nii
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-sst_run-01_bold.nii'
+        optional: true
+      ### JSON
+      - name: sst-run-1-json
+        path: /home/fmriprep/input/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-sst_run-01_bold.json
+        s3:
+          key: 'inputs/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.subjID}}_{{inputs.parameters.session}}_task-sst_run-01_bold.json'
+        optional: true
+
+    outputs:
+      artifacts:
+      - name: fmriprep-output
+        path: /home/fmriprep/output/{{inputs.parameters.subjID}}
+        s3:
+          endpoint: s3.amazonaws.com
+          bucket: 'brave-abcd'
+          key: 'derivatives/fmriprep/{{inputs.parameters.subjID}}/{{inputs.parameters.session}}/fmriprep-output.tar.gz'
+          region: us-east-2
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-heavy-nodepool
+
+    initContainers:
+      # Pre-creating the directory where the FastSurfer data will be mounted so as to allow overlapping volume mounts
+      # From: https://stackoverflow.com/a/68669101
+      - name: init-container
+        image: busybox
+        volumeMounts:
+        - name: "ses-{{=lower(inputs.parameters.session)}}"
+          mountPath: /home/fmriprep
+          readOnly: false
+        command: ['sh', '-c', 'mkdir -p /home/fmriprep/output/sourcedata/freesurfer/{{inputs.parameters.subjID}}']
+
+    volumes:
+      - name: "{{inputs.parameters.subjidpvc}}"
+        persistentVolumeClaim:
+          claimName: "{{inputs.parameters.subjidpvc}}"
+
+    container:
+      # fmriprep crashes hard when its not run as root
+      securityContext:
+        runAsUser: 0
+      imagePullPolicy: Always
+      # Pull from our public repository containing slightly modified fmriprep images
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/fmriprep:latest
+
+      volumeMounts:
+        # Naming the mount after the subject ID just for tracking purposes
+        # Mount path for all of fmriprep
+      - name: "ses-{{=lower(inputs.parameters.session)}}"
+        mountPath: /home/fmriprep
+        # Passing in the mountpath to just the FastSurfer data
+      - name: "sub-{{=lower(inputs.parameters.ndaGUID)}}"
+        mountPath: /home/fmriprep/output/sourcedata/freesurfer/{{inputs.parameters.subjID}}
+        subPath: opt/freesurfer/subjects/{{inputs.parameters.session}}
+
+      resources:
+        requests:
+          memory: 16Gi
+          cpu: 4000m
+          ephemeral-storage: 100G
+          
+      args:
+        - '--nprocs'
+        - '4'
+        - '--omp-nthreads'
+        - '4'
+        - '--mem'
+        - '16000'
+        - '--skip-bids-validation'
+        - '--fs-license-file'
+        - '/home/fmriprep/.license'
+        - '--fs-subjects-dir'
+        - '/home/fmriprep/output/sourcedata/freesurfer'
+        # Do not attempt to 'resume' recon-all from precomputed derivatives
+        - '--fs-no-resume'
+        # ABCD MinProc data is already fieldmap corrected (source?)
+        - '--ignore'
+        - 'fieldmaps'
+        # As of 25.0.0, CIFTI output cannot be generated without running recon-all
+        # - '--cifti-output'
+        # - '170k'
+        # Include these arguments to ensure replicable outputs
+        - '--skull-strip-fixed-seed'
+        - '--random-seed'
+        - '52618'
+        - '/home/fmriprep/input'
+        - '/home/fmriprep/output'
+        - 'participant'

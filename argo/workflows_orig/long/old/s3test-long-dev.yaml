@@ -1,0 +1,151 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: s3test-long-dev
+  namespace: argo-workflows
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::026415314835:role/argo-workflows-s3access
+spec:
+  archiveLogs: true
+  serviceAccountName: argo-workflows-s3access
+
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+  entrypoint: dev-template
+  templates:
+  - name: dev-template
+    dag:
+      tasks:
+      - name: generate-volume-dagtask
+        template: generate-volume
+      - name: pull-artifacts-dagtask
+        template: pull-artifacts
+        arguments:
+          parameters:
+            - name: pvc-name
+              value: '{{tasks.generate-volume-dagtask.outputs.parameters.pvc-name}}'
+        dependencies:
+          - generate-volume-dagtask
+      - name: artifact-check-dagtask
+        template: artifact-check
+        arguments:
+          parameters:
+            - name: pvc-name
+              value: '{{tasks.generate-volume-dagtask.outputs.parameters.pvc-name}}'
+        dependencies:
+          - pull-artifacts-dagtask
+      - name: fastsurfer-long-template-creation-dagtask
+        template: fastsurfer-long-template-creation
+        arguments:
+          parameters:
+            - name: timelist
+              value: '{{tasks.artifact-check-dagtask.outputs.result}}'
+        dependencies:
+          - artifact-check-dagtask
+
+  - name: generate-volume
+    resource:
+      action: create
+      setOwnerReference: true
+      manifest: |
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          generateName: input-volumeclaim-
+        spec:
+          accessModes: ['ReadWriteOnce']
+          resources:
+            requests:
+              storage: 10Gi
+
+    outputs:
+      parameters:
+        - name: pvc-name
+          valueFrom:
+            jsonPath: '{.metadata.name}'
+
+  - name: pull-artifacts
+    volumes:
+      - name: inputdir
+        persistentVolumeClaim:
+          claimName: '{{inputs.parameters.pvc-name}}'
+    container:
+      image: alpine:latest
+      volumeMounts:
+      - name: inputdir
+        mountPath: /home/nonroot
+    inputs:
+      parameters:
+        - name: pvc-name
+      artifacts: 
+      - name: T1w_Y0
+        # Container path where the output will be saved
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-baselineYear1Arm1/anat/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii'
+
+      - name: T1w_Y2
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-2YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y4
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-4YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y6
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-6YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y8
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-8YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y10
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-10YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii'
+
+
+  - name: artifact-check
+    inputs:
+      parameters:
+        - name: pvc-name
+    volumes:
+      - name: inputdir
+        persistentVolumeClaim:
+          claimName: '{{inputs.parameters.pvc-name}}'
+    script:
+      image: python:alpine3.21
+      command: [python]
+      volumeMounts:
+        - name: inputdir
+          mountPath: /home/nonroot
+      source: |
+        from pathlib import Path
+        import json
+        timelist = [T1.name.split('_')[1] for T1 in Path('/home/nonroot').rglob('*_T1w.nii')]
+        print(json.dumps(timelist))
+
+  - name: fastsurfer-long-template-creation
+    inputs:
+      parameters:
+        - name: timelist
+        - name: T1w_Y4_exists
+          value: "{{='ses-2YearFollowUpYArm1' in {{inputs.parameters.timelist}} ? inputs.artifacts.T1_Y4.path : nil}}"
+
+    container:
+      image: busybox
+      command: [echo]
+      args: ["{{inputs.parameters.T1w_Y4_exists}}"]

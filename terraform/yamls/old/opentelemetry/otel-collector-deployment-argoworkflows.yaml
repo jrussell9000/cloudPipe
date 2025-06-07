@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opentelemetry-collector
+  namespace: aws-otel-eks # Or the namespace where you want to deploy the collector
+  labels:
+    app: opentelemetry-collector
+spec:
+  replicas: 1 # Adjust as needed for scalability and availability
+  selector:
+    matchLabels:
+      app: opentelemetry-collector
+  template:
+    metadata:
+      labels:
+        app: opentelemetry-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:latest # Use a specific version for stability
+          command: ["/otelcol-contrib", "--config=/etc/otel-collector-config-argoworkflows.yaml"]
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: otel-collector-config-argoworkflows
+              mountPath: /etc/otel-collector-config-argoworkflows.yaml
+              subPath: otel-collector-config-argoworkflows.yaml
+          ports:
+            - containerPort: 8888 # OTLP gRPC
+            - containerPort: 4318 # OTLP HTTP
+            - containerPort: 9464 # Prometheus metrics exposed by the collector itself
+      volumes:
+        - name: otel-collector-config-argoworkflows
+          configMap:
+            name: otel-collector-config-argoworkflows
+

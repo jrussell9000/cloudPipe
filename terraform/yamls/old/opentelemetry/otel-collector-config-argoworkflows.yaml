@@ -1,0 +1,91 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: argo-workflows-collector
+spec:
+  mode: deployment
+  # nodeSelector:
+  #   core: "yes"
+  # tolerations:
+  #   - key: "core"
+  #     operator: "Equal"
+  #     value: "yes"
+  #     effect: "NoSchedule"
+  autoscaler:
+    minReplicas: 1
+    maxReplicas: 1
+    targetCPUUtilization: 85
+    targetMemoryUtilization: 95
+  securityContext:
+    runAsNonRoot: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 75Mi
+  image: otel/opentelemetry-collector-contrib:latest 
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+    connectors:
+      spanmetrics:
+        namespace: span.metrics
+        dimensions:
+          - name: phase
+          - name: workflow
+          - name: message
+        histogram:
+          explicit:
+            buckets: [1s, 2s, 3s, 4s, 5s, 6s, 7s, 8s, 9s, 10s, 11s]
+        exclude_dimensions:
+          - instance
+          - job
+          - k8s_node_name
+          - k8s_pod_name
+          - service_instance_id
+          - service_name
+    processors:
+      batch: {}
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+      attributes:
+        actions:
+          - key: otel
+            action: upsert
+            value: "true"
+
+    exporters:
+      debug:
+        verbosity: normal
+        sampling_initial: 5
+      prometheusremotewrite:
+        endpoint: "${prometheus_endpoint}"
+        resource_to_telemetry_conversion:
+          enabled: true
+        remote_write_queue:
+          enabled: true
+      otlphttp:
+        endpoint: "http://tempo.tempo.svc.cluster.local:4318/"
+        #traces_endpoint: "http://tempo.tempo.svc.cluster.local:4318/otlp/v1/traces"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [attributes]
+          exporters: [otlphttp, spanmetrics]
+        metrics:
+          receivers: [otlp, spanmetrics]
+          processors: [memory_limiter, attributes]
+          exporters: [prometheusremotewrite, debug]
+      telemetry:
+        logs:
+          level: debug
+          initial_fields:
+        metrics:
+          address: 0.0.0.0:8888

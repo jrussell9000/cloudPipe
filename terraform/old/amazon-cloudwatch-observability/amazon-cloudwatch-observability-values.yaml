@@ -1,0 +1,441 @@
+replicaCount: 1
+clusterName: 
+region:
+
+tolerations:
+  - operator: Exists
+containerLogs:
+  enabled: true
+  fluentBit:
+    image:
+      repository: aws-for-fluent-bit
+      tag: 2.32.5
+      tagWindows: 2.31.12-windowsservercore
+      repositoryDomainMap:
+        public: public.ecr.aws/aws-observability
+        cn-north-1: 128054284489.dkr.ecr.cn-north-1.amazonaws.com.cn
+        cn-northwest-1: 128054284489.dkr.ecr.cn-northwest-1.amazonaws.com.cn
+        us-gov-east-1: 161423150738.dkr.ecr.us-gov-east-1.amazonaws.com
+        us-gov-west-1: 161423150738.dkr.ecr.us-gov-west-1.amazonaws.com
+    resources:
+      limits:
+        cpu: 500m
+        memory: 250Mi
+      requests:
+        cpu: 50m
+        memory: 25Mi
+    priorityClassName: system-node-critical
+    config:
+      service: |
+        [SERVICE]
+          Flush                     5
+          Grace                     30
+          Log_Level                 error
+          Daemon                    off
+          Parsers_File              parsers.conf
+          storage.path              /var/fluent-bit/state/flb-storage/
+          storage.sync              normal
+          storage.checksum          off
+          storage.backlog.mem_limit 5M
+      customParsers: |
+        [PARSER]
+          Name                syslog
+          Format              regex
+          Regex               ^(?<time>[^ ]* {1,2}[^ ]* [^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\/\.\-]*)(?:\[(?<pid>[0-9]+)\])?(?:[^\:]*\:)? *(?<message>.*)$
+          Time_Key            time
+          Time_Format         %b %d %H:%M:%S
+
+        [PARSER]
+          Name                container_firstline
+          Format              regex
+          Regex               (?<log>(?<="log":")\S(?!\.).*?)(?<!\\)".*(?<stream>(?<="stream":").*?)".*(?<time>\d{4}-\d{1,2}-\d{1,2}T\d{2}:\d{2}:\d{2}\.\w*).*(?=})
+          Time_Key            time
+          Time_Format         %Y-%m-%dT%H:%M:%S.%LZ
+
+        [PARSER]
+          Name                cwagent_firstline
+          Format              regex
+          Regex               (?<log>(?<="log":")\d{4}[\/-]\d{1,2}[\/-]\d{1,2}[ T]\d{2}:\d{2}:\d{2}(?!\.).*?)(?<!\\)".*(?<stream>(?<="stream":").*?)".*(?<time>\d{4}-\d{1,2}-\d{1,2}T\d{2}:\d{2}:\d{2}\.\w*).*(?=})
+          Time_Key            time
+          Time_Format         %Y-%m-%dT%H:%M:%S.%LZ
+      extraFiles:
+        application-log.conf: |
+          [INPUT]
+            Name                tail
+            Tag                 argo-workflows.*
+            Path                /var/log/containers/*cloudpipe-master-workflow*.log
+            multiline.parser    docker, cri
+            DB                  /var/fluent-bit/state/flb_container.db
+            Mem_Buf_Limit       50MB
+            Skip_Long_Lines     On
+            Refresh_Interval    10
+            Rotate_Wait         30
+            storage.type        filesystem
+            Read_from_Head      ${READ_FROM_HEAD}
+
+          [FILTER]
+            Name                kubernetes
+            Match               application.*
+            Kube_URL            https://kubernetes.default.svc:443
+            Kube_Tag_Prefix     application.var.log.containers.
+            Merge_Log           On
+            Merge_Log_Key       log_processed
+            K8S-Logging.Parser  On
+            K8S-Logging.Exclude Off
+            Labels              Off
+            Annotations         Off
+            Use_Kubelet         On
+            Kubelet_Port        10250
+            Buffer_Size         0
+            Use_Pod_Association On
+
+          [OUTPUT]
+            Name                cloudwatch_logs
+            Match               argo-workflows.*
+            region              ${AWS_REGION}
+            log_group_name      /aws/containerinsights/${CLUSTER_NAME}/argo-workflows
+            log_stream_prefix   ${HOST_NAME}-
+            auto_create_group   true
+            extra_user_agent    container-insights
+            add_entity          true
+## Provide CloudWatchAgent Operator manager container image and resources.
+manager:
+  name:
+  image:
+    repository: cloudwatch-agent-operator
+    tag: 2.0.1
+    repositoryDomainMap:
+      public: public.ecr.aws/cloudwatch-agent
+      cn-north-1: 934860584483.dkr.ecr.cn-north-1.amazonaws.com.cn
+      cn-northwest-1: 934860584483.dkr.ecr.cn-northwest-1.amazonaws.com.cn
+      us-gov-east-1: 743662458514.dkr.ecr.us-gov-east-1.amazonaws.com
+      us-gov-west-1: 743662458514.dkr.ecr.us-gov-west-1.amazonaws.com
+  autoInstrumentationImage:
+    java:
+      repositoryDomain: public.ecr.aws/aws-observability
+      repository: adot-autoinstrumentation-java
+      tag: v1.32.6
+    python:
+      repositoryDomain: public.ecr.aws/aws-observability
+      repository: adot-autoinstrumentation-python
+      tag: v0.7.0
+    dotnet:
+      repositoryDomain: public.ecr.aws/aws-observability
+      repository: adot-autoinstrumentation-dotnet
+      tag: v1.4.0
+    nodejs:
+      repositoryDomain: public.ecr.aws/aws-observability
+      repository: adot-autoinstrumentation-node
+      tag: v0.3.0
+  autoInstrumentationConfiguration:
+    java:
+      runtime_metrics:
+        enabled: "true"
+    python:
+      runtime_metrics:
+        enabled: "true"
+    dotnet:
+      runtime_metrics:
+        enabled: "true"
+  autoInstrumentationResources:
+    java:
+      limits:
+        cpu: 500m
+        memory: 64Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+    python:
+      limits:
+        cpu: 500m
+        memory: 32Mi
+      requests:
+        cpu: 50m
+        memory: 32Mi
+    dotnet:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+    nodejs:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+  autoAnnotateAutoInstrumentation:
+    java:
+      namespaces: []
+      deployments: []
+      daemonsets: []
+      statefulsets: []
+    python:
+      namespaces: []
+      deployments: []
+      daemonsets: []
+      statefulsets: []
+    dotnet:
+      namespaces: []
+      deployments: []
+      daemonsets: []
+      statefulsets: []
+    nodejs:
+      namespaces: []
+      deployments: []
+      daemonsets: []
+      statefulsets: []
+  ports:
+    containerPort: 9443
+    metricsPort: 8080
+    webhookPort: 9443
+    healthzPort: 8081
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  ## Adds additional environment variables
+  ## e.g ENV_VAR: env_value
+  env:
+    ENABLE_WEBHOOKS: "true"
+  # -- Create the manager ServiceAccount
+  serviceAccount:
+    create: true
+    annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  service:
+    name:
+## Admission webhooks make sure only requests with correctly formatted rules will get into the Operator.
+admissionWebhooks:
+  create: true
+  failurePolicy: Ignore
+  secretName: ""
+  ## Defines the sidecar injection logic in Pods.
+  ## - Ignore, the injection is fail-open. The pod will be created, but the sidecar won't be injected.
+  ## - Fail, the injection is fail-close. If the webhook pod is not ready, pods cannot be created.
+  pods:
+    failurePolicy: Ignore
+  ## Adds a prefix to the mutating webhook name.
+  ## This can be used to order this mutating webhook with all your cluster's mutating webhooks.
+  namePrefix: ""
+  ## Customize webhook timeout duration
+  timeoutSeconds: 10
+  ## Provide selectors for your objects
+  namespaceSelector: {}
+  objectSelector: {}
+  ## TLS Certificate Option 1: Use Helm to automatically generate self-signed certificate.
+  ## autoGenerateCert must be enabled. This is the default option.
+  ## If true, Helm will automatically create a self-signed cert and secret for you.
+  autoGenerateCert:
+    enabled: true
+    expiryDays: 3650 # 10 years
+  ## TLS Certificate Option 2: Use certManager to generate self-signed certificate.
+  ## certManager must be enabled. If enabled, it takes precedence over option 1.
+  certManager:
+    enabled: false
+    ## Provide the issuer kind and name to do the cert auth job.
+    ## By default, OpenTelemetry Operator will use self-signer issuer.
+    issuerRef: {}
+    # kind:
+    # name:
+    ## Annotations for the cert and issuer if cert-manager is enabled.
+    certificateAnnotations: {}
+    issuerAnnotations: {}
+  ## Secret annotations
+  secretAnnotations: {}
+  ## Secret labels
+  secretLabels: {}
+## List of AmazonCloudWatchAgent workloads to install & manage, each representing an independent installation of the AmazonCloudWatchAgent CustomResource. Each entry in this list uses the schema & the defaults from $.agent, so only provide any overrides here.
+agents:
+  - name: cloudwatch-agent
+agent:
+  name:
+  mode: daemonset # Represents the mode the AmazonCloudWatchAgent workload will run in (deployment, daemonset or statefulset)
+  replicas: 1 # The total number non-terminated pods targeted by this AmazonCloudWatchAgent's deployment or statefulSet.
+  image:
+    repository: cloudwatch-agent
+    tag: 1.300051.0b992
+    repositoryDomainMap:
+      public: public.ecr.aws/cloudwatch-agent
+      cn-north-1: 934860584483.dkr.ecr.cn-north-1.amazonaws.com.cn
+      cn-northwest-1: 934860584483.dkr.ecr.cn-northwest-1.amazonaws.com.cn
+      us-gov-east-1: 743662458514.dkr.ecr.us-gov-east-1.amazonaws.com
+      us-gov-west-1: 743662458514.dkr.ecr.us-gov-west-1.amazonaws.com
+  enabled: true
+  priorityClassName: system-node-critical
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  ## TLS Certificate Option 1: Use Helm to automatically generate self-signed certificate.
+  ## autoGenerateCert must be enabled. This is the default option.
+  ## If true, Helm will automatically create a self-signed cert and secret for you.
+  autoGenerateCert:
+    enabled: true
+    expiryDays: 3650 # 10 years
+  ## TLS Certificate Option 2: Use certManager to generate self-signed certificate.
+  ## certManager must be enabled. If enabled, it takes precedence over option 1.
+  certManager:
+    enabled: false
+    ## Provide the issuer kind and name to do the cert auth job.
+    ## By default, OpenTelemetry Operator will use self-signer issuer.
+    issuerRef: {}
+    # kind:
+    # name:
+    ## Annotations for the cert and issuer if cert-manager is enabled.
+    certificateAnnotations: {}
+    issuerAnnotations: {}
+  serviceAccount:
+    name: # override agent service account name
+  config: # optional config that can be provided to override the defaultConfig
+  otelConfig: # optional YAML config that can be provided to combine with the config/defaultConfig
+  # Sources for configuring the Cloudwatch Agent:
+  # Start here: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/create-cloudwatch-agent-configuration-file.html
+  # procstat metrics: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Agent-procstat-process-metrics.html
+  # nvidia metrics: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Agent-NVIDIA-GPU.html
+  defaultConfig:
+    {
+      "logs": {
+        "metrics_collected": {
+          "kubernetes": {
+            "enhanced_container_insights": true
+          },
+          "application_signals": { }
+        }
+      },
+      "traces": {
+        "traces_collected": {
+          "application_signals": { }
+        }
+      },
+      "metrics": {
+        "metrics_destinations": {
+          "cloudwatch": {},
+          "amp": {
+            "workspace_id": "ws-dd571e94-1968-4ed7-9ed6-fff23190dac1"
+            }
+          },
+        "namespace": "CWAgent",
+        "append_dimensions": {
+          "InstanceId": "${aws:InstanceId}",
+          "InstanceType": "${aws:InstanceId}",
+          "AutoScalingGroupName": "${aws:AutoScalingGroupName}"
+        },
+        "metrics_collected": {
+          "procstat": [
+            {
+              "pattern": "fastsurfer",
+              "measurement" : [
+                "cpu_usage",
+                "memory_data",
+                "memory_swap",
+                "num_threads",
+                "read_bytes",
+                "write_bytes"
+              ]
+            }
+          ],
+          "nvidia_gpu": {
+            "measurement": [
+              "utilization_gpu",
+              "temperature_gpu",
+              "power_draw",
+              "utilization_memory",
+              "fan_speed",
+              "memory_total",
+              "memory_used",
+              "memory_free",
+              "pcie_link_gen_current",
+              "pcie_link_width_current",
+              "encoder_stats_session_count",
+              "encoder_stats_average_fps",
+              "encoder_stats_average_latency",
+              "clocks_current_graphics",
+              "clocks_current_sm",
+              "clocks_current_memory",
+              "clocks_current_video"
+            ],
+            "metrics_collection_interval": 60
+          }
+        }
+      },
+      "force_flush_interval": 60
+    }
+  prometheus:
+    config:
+    targetAllocator:
+      enabled: false
+      image:
+        repository: cloudwatch-agent-target-allocator
+        tag: 1.0.0
+        repositoryDomainMap:
+          public: public.ecr.aws/cloudwatch-agent
+          cn-north-1: 934860584483.dkr.ecr.cn-north-1.amazonaws.com.cn
+          cn-northwest-1: 934860584483.dkr.ecr.cn-northwest-1.amazonaws.com.cn
+          us-gov-east-1: 743662458514.dkr.ecr.us-gov-east-1.amazonaws.com
+          us-gov-west-1: 743662458514.dkr.ecr.us-gov-west-1.amazonaws.com
+      prometheusCR:
+        enabled: false
+dcgmExporter:
+  name:
+  image:
+    repository: dcgm-exporter
+    tag: 3.3.7-3.5.0-ubuntu22.04
+    repositoryDomainMap:
+      public: nvcr.io/nvidia/k8s
+      cn-north-1: 934860584483.dkr.ecr.cn-north-1.amazonaws.com.cn
+      cn-northwest-1: 934860584483.dkr.ecr.cn-northwest-1.amazonaws.com.cn
+      us-gov-east-1: 743662458514.dkr.ecr.us-gov-east-1.amazonaws.com
+      us-gov-west-1: 743662458514.dkr.ecr.us-gov-west-1.amazonaws.com
+  resources:
+    requests:
+      cpu: 250m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 500Mi
+  configmap: dcgm-exporter-config-map
+  arguments:
+    - --web-config-file=/etc/dcgm-exporter/web-config.yaml
+  service:
+    enable: true
+    type: ClusterIP
+    port: 9400
+    address: :9400
+  kubeletPath: /var/lib/kubelet/pod-resources
+  serviceAccount:
+    name: # override exporter service account name
+neuronMonitor:
+  name:
+  image:
+    repository: neuron-monitor
+    tag: 1.2.1
+    repositoryDomainMap:
+      public: public.ecr.aws/neuron
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 256m
+      memory: 128Mi
+  configmap: neuron-monitor-config-map
+  service:
+    enable: true
+    type: ClusterIP
+    port: 8000
+    address: :8000
+  securityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+    capabilities:
+      add:
+        - SYS_ADMIN
+  serviceAccount:
+    name: # override exporter service account name

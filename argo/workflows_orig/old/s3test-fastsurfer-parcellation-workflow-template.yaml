@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: s3test-abcd-fastsurfer-parcellation-workflow-template-submittable
+  namespace: argo-workflows
+spec:
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    runAsNonRoot: true
+
+  templates:
+  - name: fastsurfer-parcellation-template
+
+    inputs:
+      artifacts:
+      - name: segmentation-output
+        path: /home/nonroot/{{workflow.parameters.subjIDses}}
+        s3:
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}'
+
+      - name: fslicense
+        path: /opt/freesurfer/.license
+        s3:
+          key: config/fslicense
+
+    outputs:
+      artifacts:
+      - name: fastsurfer-output
+        path: /home/nonroot/{{workflow.parameters.subjIDses}}/
+        s3:
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.ses}}/'
+        archive:
+          none: {}
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-cpuheavy-nodepool
+
+    container:
+      imagePullPolicy: IfNotPresent
+      image: public.ecr.aws/w5b6h0h5/fastsurfer:latest
+      # deepmi/fastsurfer does NOT explicitly add a nonroot user to the image - which seems to be a requirement for containerd
+      # we'll just create a variant that does add the nonroot user (and their user directory)
+      resources:
+        requests:
+          memory: 16Gi
+          cpu: 4000m
+      args:
+        - '--sid'
+        - '{{workflow.parameters.subjIDses}}'
+        - '--sd'
+        - '/home/nonroot'
+        - '--surf_only'
+        - '--parallel'
+        - '--3T'
+        - '--threads'
+        - '4'
+        - '--fs_license'
+        - '{{inputs.artifacts.fslicense.path}}'

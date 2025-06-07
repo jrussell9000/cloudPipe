@@ -1,0 +1,339 @@
+# --- 1. Install ADOT Operator using the EKS Addon (recommended approach) ---
+
+data "aws_eks_addon_version" "adot" {
+  addon_name         = "adot"
+  kubernetes_version = var.kubernetes_version
+  most_recent        = true
+}
+
+resource "aws_eks_addon" "adot" {
+  cluster_name  = var.name
+  addon_name    = data.aws_eks_addon_version.adot.id
+  addon_version = data.aws_eks_addon_version.adot.version
+}
+
+
+# Get the OIDC provider URL from the cluster information
+
+
+resource "kubernetes_namespace_v1" "opentelemetry" {
+  metadata {
+    name = "aws-otel-eks"
+  }
+}
+
+# --- 2. Create AMP Workspace ---
+
+resource "aws_prometheus_workspace" "amp" {
+  alias = "${var.name}-amp-workspace"
+}
+
+# --- 3. Create IAM Policy and Role for ADOT Collector (IRSA) (No changes needed) ---
+
+# Grab the url for the OIDC provider (the EKS Cluster)
+data "aws_iam_openid_connect_provider" "oidc_provider" {
+  url = data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer
+}
+
+# Create an assume role policy (are the second two statements actually necessary?)
+data "aws_iam_policy_document" "otel_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    principals {
+      type = "Federated"
+      # CANNOT use module.eks.oidc_provider_arn for this.
+      identifiers = [data.aws_iam_openid_connect_provider.oidc_provider.arn]
+    }
+
+    # condition {
+    #   test     = "StringEquals"
+    #   variable = "${module.eks.cluster_oidc_issuer_url}:sub"
+    #   values   = ["system:serviceaccount:${kubernetes_namespace_v1.opentelemetry.metadata[0].name}:amp-iamproxy-ingest-service-account"]
+    # }
+  }
+  statement {
+    actions = ["sts:AssumeRole"]
+    effect  = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+  statement {
+    actions = ["sts:AssumeRole"]
+    effect  = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["eks.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "eks.amazonaws.com:cluster-name"
+      values   = [var.name]
+    }
+  }
+}
+
+# Create an IAM role for the collector
+resource "aws_iam_role" "aws_otel_collector_role" {
+  name               = "amp-iamproxy-ingest-role"
+  assume_role_policy = data.aws_iam_policy_document.otel_assume_role_policy.json
+}
+
+# List of AWS-Managed policies to assign to the IAM role created above
+data "aws_iam_policy" "adot_prometheus_policies" {
+  for_each = toset([
+    # "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+    # "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess",
+    # "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess",
+    "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+    # "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
+    # "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+    # "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+    # "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess",
+    # "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess",
+    # "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+    "arn:aws:iam::aws:policy/AmazonPrometheusFullAccess"
+  ])
+  arn = each.value
+}
+
+# Attach each policy in the preceding list to the IAM role
+resource "aws_iam_role_policy_attachment" "adot_attach_policy" {
+  role       = aws_iam_role.aws_otel_collector_role.name
+  for_each   = data.aws_iam_policy.adot_prometheus_policies
+  policy_arn = each.value.arn
+}
+
+# Create a cluster role for the collector service account
+resource "kubernetes_cluster_role_v1" "aws_otel_sa" {
+  metadata {
+    name = "aoc-agent-role"
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["pods", "nodes", "endpoints"]
+    verbs      = ["list", "watch", "get"]
+  }
+
+  rule {
+    api_groups = ["apps"]
+    resources  = ["replicasets"]
+    verbs      = ["list", "watch", "get"]
+  }
+
+  rule {
+    api_groups = ["batch"]
+    resources  = ["jobs"]
+    verbs      = ["list", "watch"]
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["nodes/proxy"]
+    verbs      = ["get"]
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["nodes/stats", "configmaps", "events"]
+    verbs      = ["create", "get"]
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["configmaps"]
+    verbs      = ["update"]
+  }
+
+  rule {
+    api_groups     = [""]
+    resources      = ["configmaps"]
+    resource_names = ["otel-container-insight-clusterleader"]
+    verbs          = ["get", "update", "create"]
+  }
+
+  rule {
+    api_groups = ["coordination.k8s.io"]
+    resources  = ["leases"]
+    verbs      = ["create", "get", "update"]
+  }
+
+  rule {
+    api_groups     = ["coordination.k8s.io"]
+    resources      = ["leases"]
+    resource_names = ["otel-container-insight-clusterleader"]
+    verbs          = ["get", "update", "create"]
+  }
+}
+
+# Create the collector's service account
+resource "kubernetes_service_account_v1" "aws_otel_sa" {
+  metadata {
+    name      = "amp-iamproxy-ingest-service-account"
+    namespace = kubernetes_namespace_v1.opentelemetry.metadata[0].name
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_otel_collector_role.arn
+    }
+  }
+}
+
+# Bind the service account to the cluster role
+resource "kubernetes_cluster_role_binding_v1" "aws_otel_sa" {
+  metadata {
+    name = "${kubernetes_cluster_role_v1.aws_otel_sa.metadata[0].name}-binding"
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account_v1.aws_otel_sa.metadata[0].name
+    namespace = kubernetes_namespace_v1.opentelemetry.metadata[0].name
+  }
+  role_ref {
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role_v1.aws_otel_sa.metadata[0].name
+    api_group = "rbac.authorization.k8s.io"
+  }
+}
+
+# --- 4. Add the OTEL daemonset and configmap ---
+
+# Adding the configmap for the daemonset
+# resource "kubectl_manifest" "otel_agent_configmap" {
+#   yaml_body = templatefile("${path.module}/yamls/opentelemetry/otel-agent-config.yaml", {
+#     region              = var.region
+#     prometheus_endpoint = aws_prometheus_workspace.amp.prometheus_endpoint
+#     cluster_name        = module.eks.cluster_name
+#     aws_otel_sa         = aws_iam_role.aws_otel_collector_role.arn
+#   })
+# }
+
+resource "kubectl_manifest" "otel-collector-config-argoworkflows" {
+  yaml_body = templatefile("${path.module}/yamls/opentelemetry/otel-collector-config-argoworkflows.yaml", {
+    CLUSTER_NAME        = module.eks.cluster_name
+    prometheus_endpoint = aws_prometheus_workspace.amp.prometheus_endpoint
+  })
+}
+
+# Adding the OTEL daemonset
+# resource "kubectl_manifest" "otel_container_insights_daemonset" {
+#   yaml_body  = file("${path.module}/yamls/opentelemetry/otel-container-insights-daemonset.yaml")
+#   depends_on = [kubectl_manifest.otel_agent_configmap]
+# }
+
+# --- 5. Create an Amazon Managed Grafana Workspace ---
+
+# 1. Create IAM Role for Grafana Workspace to Access AWS Services (incl. AMP)
+data "aws_iam_policy_document" "grafana_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["grafana.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "grafana_workspace_role" {
+  name               = "${var.name}-grafana-workspace-role"
+  assume_role_policy = data.aws_iam_policy_document.grafana_assume_role_policy.json
+}
+
+# 2. Create IAM Policy granting Grafana access to AMP
+#    This policy allows Grafana to query metrics from the specific AMP workspace
+data "aws_iam_policy_document" "grafana_amp_access_policy" {
+  statement {
+    sid    = "AllowGrafanaToQueryAMP"
+    effect = "Allow"
+    actions = [
+      "aps:ListWorkspaces",
+      "aps:QueryMetrics",
+      "aps:GetLabels",
+      "aps:GetSeries",
+      "aps:GetMetricMetadata",
+      "aps:DescribeWorkspace" # Recommended for SigV4 setup
+    ]
+    resources = [
+      aws_prometheus_workspace.amp.arn # Grant access ONLY to the created AMP workspace
+    ]
+  }
+  # This permission needs an asterisk for resources
+  statement {
+    sid    = "AllowGrafanaToListAMPWorkspaces"
+    effect = "Allow"
+    actions = [
+      "aps:ListWorkspaces"
+    ]
+    resources = ["*"]
+  }
+  # Optional: Allow access to X-Ray if you plan to use it as a data source
+  statement {
+    sid    = "AllowGrafanaXRayAccess"
+    effect = "Allow"
+    actions = [
+      "xray:BatchGetTraces",
+      "xray:GetTraceSummaries",
+      "xray:GetTraceGraph",
+      "xray:GetGroups",
+      "xray:GetSamplingRules",
+      "xray:GetSamplingTargets",
+      "xray:GetSamplingStatisticSummaries"
+    ]
+    resources = ["*"] # X-Ray permissions are typically broad
+  }
+}
+
+resource "aws_iam_policy" "grafana_amp_access_policy" {
+  name        = "${var.name}-grafana-amp-access-policy"
+  description = "Allows Grafana workspace to query the specific AMP workspace"
+  policy      = data.aws_iam_policy_document.grafana_amp_access_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "grafana_amp_access_attachment" {
+  role       = aws_iam_role.grafana_workspace_role.name
+  policy_arn = aws_iam_policy.grafana_amp_access_policy.arn
+}
+
+resource "aws_grafana_workspace" "amg" {
+  account_access_type      = "CURRENT_ACCOUNT"
+  authentication_providers = ["AWS_SSO"]       # Or ["SAML"]
+  permission_type          = "SERVICE_MANAGED" # Allow AWS to manage the necessary permissions
+  name                     = "${var.name}-grafana-workspace"
+  role_arn                 = aws_iam_role.grafana_workspace_role.arn
+  description              = "Grafana workspace for EKS monitoring (${var.name})"
+  data_sources             = ["PROMETHEUS", "CLOUDWATCH"]
+
+  # Optional: Configure VPC connection if needed for private data sources (not usually required for AMP)
+  # vpc_configuration {
+  #   security_group_ids = ["sg-xxxxxxxxxxxxxxxxx"]
+  #   subnet_ids         = ["subnet-xxxxxxxxxxxxxxxxx", "subnet-yyyyyyyyyyyyyyyyy"]
+  # }
+
+  # Ensure AMP workspace exists before Grafana tries to potentially configure access to it
+  depends_on = [
+    aws_prometheus_workspace.amp,
+    aws_iam_role_policy_attachment.grafana_amp_access_attachment
+  ]
+}
+
+resource "aws_grafana_role_association" "amg" {
+  role         = "ADMIN"
+  user_ids     = ["01dbd590-e041-7037-85a4-31646453ee0a", "e1dbe5a0-d0b1-700d-3fe5-815968958634"]
+  workspace_id = aws_grafana_workspace.amg.id
+}
+
+resource "aws_grafana_workspace_service_account" "amg" {
+  name         = "${var.name}-admin"
+  grafana_role = "ADMIN"
+  workspace_id = aws_grafana_workspace.amg.id
+}
+
+resource "aws_grafana_workspace_service_account_token" "amg" {
+  name               = "${var.name}-amg-key"
+  service_account_id = aws_grafana_workspace_service_account.amg.service_account_id
+  seconds_to_live    = 3600
+  workspace_id       = aws_grafana_workspace.amg.id
+}

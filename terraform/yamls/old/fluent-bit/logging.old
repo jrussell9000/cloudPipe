@@ -1,0 +1,330 @@
+resource "kubernetes_namespace_v1" "amazon_cloudwatch" {
+  metadata {
+    name = var.fluent_bit_namespace
+  }
+}
+
+
+# CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "eks_logs" {
+  name              = var.cloudwatch_log_group_name
+  retention_in_days = var.log_retention_days
+}
+
+# IAM Policy Document for Fluent Bit
+data "aws_iam_policy_document" "fluent_bit_policy_doc" {
+  statement {
+    actions = [
+      "logs:CreateLogGroup", # Although we create it, Fluent Bit might try too
+      "logs:CreateLogStream",
+      "logs:DescribeLogStreams",
+      "logs:PutLogEvents",
+      "logs:PutRetentionPolicy" # Optional: Allow Fluent Bit to manage retention
+    ]
+    resources = ["arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:${var.cloudwatch_log_group_name}:*"]
+    effect    = "Allow"
+  }
+}
+
+# IAM Policy
+resource "aws_iam_policy" "fluent_bit_policy" {
+  name        = "${var.name}-${var.fluent_bit_service_account_name}-policy"
+  description = "IAM policy for Fluent Bit on EKS cluster ${var.name} to send logs to CloudWatch"
+  policy      = data.aws_iam_policy_document.fluent_bit_policy_doc.json
+}
+
+# IAM Role for Fluent Bit Service Account (IRSA)
+resource "aws_iam_role" "fluent_bit_role" {
+  name        = "${var.name}-${var.fluent_bit_service_account_name}-role"
+  description = "IAM role for Fluent Bit service account on EKS cluster ${var.name}"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = "${module.eks.oidc_provider_arn}"
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            # Compare the OIDC audience claim to ensure it's for this service account
+            "${module.eks.cluster_oidc_issuer_url}:sub" = "system:serviceaccount:${var.fluent_bit_namespace}:${var.fluent_bit_service_account_name}"
+            # Optional but recommended: Restrict audience claim
+            "${module.eks.cluster_oidc_issuer_url}:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Attach Policy to Role
+resource "aws_iam_role_policy_attachment" "fluent_bit_attach" {
+  role       = aws_iam_role.fluent_bit_role.name
+  policy_arn = aws_iam_policy.fluent_bit_policy.arn
+}
+
+# Service Account for Fluent Bit Pods
+resource "kubernetes_service_account" "fluent_bit" {
+  metadata {
+    name      = var.fluent_bit_service_account_name
+    namespace = kubernetes_namespace_v1.amazon_cloudwatch.metadata[0].name
+    annotations = {
+      # This annotation links the K8s Service Account to the AWS IAM Role
+      "eks.amazonaws.com/role-arn" = aws_iam_role.fluent_bit_role.arn
+    }
+    labels = {
+      "app.kubernetes.io/name" = "aws-for-fluent-bit" # Common label used by AWS examples
+    }
+  }
+  # Ensure the namespace exists before creating the service account
+  depends_on = [kubernetes_namespace_v1.amazon_cloudwatch]
+}
+
+# ConfigMap for Fluent Bit Configuration
+resource "kubernetes_config_map" "fluent_bit_config" {
+  metadata {
+    name      = "fluent-bit-config"
+    namespace = kubernetes_namespace_v1.amazon_cloudwatch.metadata[0].name
+  }
+
+  data = {
+    # Main Configuration: Defines inputs, filters, outputs
+    "fluent-bit.conf" = <<-EOT
+        [SERVICE]
+            Flush           5
+            Daemon          Off
+            Log_Level       info
+            Parsers_File    parsers.conf
+            HTTP_Server     On
+            HTTP_Listen     0.0.0.0
+            HTTP_Port       2020
+
+        @INCLUDE input-kubernetes.conf
+        @INCLUDE filter-kubernetes.conf
+        @INCLUDE output-cloudwatch.conf
+      EOT
+
+    # Input Configuration: Tail logs from containers
+    "input-kubernetes.conf" = <<-EOT
+        [INPUT]
+            Name                tail
+            Tag                 application.*
+            Exclude_Path        /var/log/containers/nvdp*, /var/log/containers/cloudwatch-agent*, /var/log/containers/fluent-bit*, /var/log/containers/aws-node*, /var/log/containers/kube-proxy*
+            Path                /var/log/containers/*.log
+            multiline.parser    python, docker, cri
+            DB                  /var/log/flb_kube.db
+            Mem_Buf_Limit       5MB
+            Skip_Long_Lines     On
+            Refresh_Interval    10
+            Read_from_Head      true
+      EOT
+
+    # Filter Configuration: Enrich logs with Kubernetes metadata
+    "filter-kubernetes.conf" = <<-EOT
+        [FILTER]
+            Name                kubernetes
+            Match               kube.*
+            Kube_URL            https://kubernetes.default.svc:443
+            Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+            Kube_Tag_Prefix     kube.var.log.containers.
+            Merge_Log           On
+            Merge_Log_Key       log_processed
+            K8S-Logging.Parser  On
+            K8S-Logging.Exclude Off
+            Annotations         Off
+            Labels              Off
+      EOT
+
+    # Output Configuration: Send logs to CloudWatch
+    "output-cloudwatch.conf" = <<-EOT
+        [OUTPUT]
+            Name                cloudwatch_logs
+            Match               kube.*
+            region              ${var.region}
+            log_group_name      ${var.cloudwatch_log_group_name}
+            log_stream_prefix   from-fluent-bit-
+            auto_create_group   true
+            log_key             log
+      EOT
+
+    # Parsers Configuration: Define how to parse log lines (docker/JSON is common)
+    "parsers.conf" = <<-EOT
+
+      EOT
+  }
+
+  depends_on = [kubernetes_namespace_v1.amazon_cloudwatch]
+}
+
+# DaemonSet to deploy Fluent Bit on each node
+resource "kubernetes_daemonset" "fluent_bit" {
+  metadata {
+    name      = "fluent-bit"
+    namespace = kubernetes_namespace_v1.amazon_cloudwatch.metadata[0].name
+    labels = {
+      "k8s-app"                = "fluent-bit-logging"
+      "app.kubernetes.io/name" = "aws-for-fluent-bit"
+    }
+  }
+
+  spec {
+    selector {
+      match_labels = {
+        "k8s-app" = "fluent-bit-logging"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          "k8s-app" = "fluent-bit-logging"
+        }
+      }
+
+      spec {
+        # Important: Use the service account linked to the IAM role
+        service_account_name = kubernetes_service_account.fluent_bit.metadata[0].name
+
+        # Ensure pods run on Linux nodes if you have mixed OS cluster
+        node_selector = {
+          "kubernetes.io/os" = "linux"
+        }
+
+        # Give Fluent Bit access to host logs and system info
+        host_network = false # Usually not needed unless specific network checks required
+        dns_policy   = "ClusterFirst"
+
+        container {
+          name  = "fluent-bit"
+          image = var.fluent_bit_image
+          # Set resource requests/limits based on testing
+          resources {
+            limits = {
+              memory = "200Mi" # Adjust based on load
+              cpu    = "200m"  # Adjust based on load
+            }
+            requests = {
+              memory = "100Mi" # Adjust based on load
+              cpu    = "100m"  # Adjust based on load
+            }
+          }
+
+          # Define ports (for HTTP server if enabled)
+          port {
+            name           = "http-metrics"
+            container_port = 2020
+            protocol       = "TCP"
+          }
+          # Liveness/Readiness probes
+          readiness_probe {
+            http_get {
+              path = "/"
+              port = 2020
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+          }
+          liveness_probe {
+            http_get {
+              path = "/api/v1/health" # Or use a simpler path if / doesn't work
+              port = 2020
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+            failure_threshold     = 3
+          }
+
+          # Mount necessary volumes
+          volume_mount {
+            name       = "varlog"
+            mount_path = "/var/log"
+            read_only  = false # Needs write for DB file
+          }
+          volume_mount {
+            name       = "varlibdockercontainers"
+            mount_path = "/var/lib/docker/containers"
+            read_only  = true
+          }
+          # Mount the config map
+          volume_mount {
+            name       = "fluent-bit-config-volume"
+            mount_path = "/fluent-bit/etc/"
+          }
+          # Mount service account token for K8s filter API access
+          volume_mount {
+            name       = "kube-api-access" # Name matches volume below
+            mount_path = "/var/run/secrets/kubernetes.io/serviceaccount"
+            read_only  = true
+          }
+
+          # Set environment variables if needed (e.g., Cluster Name, Region)
+          # Often configured via ConfigMap, but env vars are an option
+          env {
+            name  = "AWS_REGION"
+            value = var.region
+          }
+          env {
+            name  = "CLUSTER_NAME"
+            value = var.name
+          }
+        }
+
+        # Define volumes
+        volume {
+          name = "varlog"
+          host_path {
+            path = "/var/log"
+          }
+        }
+        volume {
+          name = "varlibdockercontainers"
+          host_path {
+            path = "/var/lib/docker/containers"
+          }
+        }
+        volume {
+          name = "fluent-bit-config-volume"
+          config_map {
+            name = kubernetes_config_map.fluent_bit_config.metadata[0].name
+          }
+        }
+        volume {
+          name = "kube-api-access" # Must match volume mount name
+          projected {
+            sources {
+              service_account_token {
+                path               = "token"
+                expiration_seconds = 7200 # Optional: Token expiration
+                # audience          = "sts.amazonaws.com" # Optional but recommended if used in Condition
+              }
+              config_map {
+                name = "kube-root-ca.crt" # Standard CA cert configmap
+                items {
+                  key  = "ca.crt"
+                  path = "ca.crt"
+                }
+              }
+              downward_api {
+                items {
+                  path = "namespace"
+                  field_ref {
+                    field_path = "metadata.namespace"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  # Ensure dependent resources are created first
+  depends_on = [
+    kubernetes_config_map.fluent_bit_config,
+    kubernetes_service_account.fluent_bit,
+    aws_iam_role_policy_attachment.fluent_bit_attach
+  ]
+}

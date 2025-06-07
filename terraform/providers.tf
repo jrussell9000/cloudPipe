@@ -2,6 +2,13 @@ provider "aws" {
   region = local.region
 }
 
+# This provider is required for ECR to authenticate with public repos. 
+# ECR authentication requires us-east-1 as region hence its hardcoded below.
+provider "aws" {
+  region = "us-east-1"
+  alias  = "virginia"
+}
+
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
@@ -35,14 +42,33 @@ provider "kubectl" {
   }
 }
 
+################################################################################
+# Common data/locals
+################################################################################
+
 data "aws_eks_cluster_auth" "this" {
   name = module.eks.cluster_name
 }
 
-data "aws_availability_zones" "available" {}
+# Get information about the existing EKS cluster
+data "aws_eks_cluster" "cluster" {
+  name = var.name
+}
+
+data "aws_availability_zones" "available" {
+  # Do not include local zones
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required"]
+  }
+}
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
+
+data "aws_ecrpublic_authorization_token" "token" {
+  provider = aws.virginia
+}
 
 locals {
   name   = var.name
@@ -50,5 +76,4 @@ locals {
 
   account_id = data.aws_caller_identity.current.account_id
   partition  = data.aws_partition.current.partition
-
 }

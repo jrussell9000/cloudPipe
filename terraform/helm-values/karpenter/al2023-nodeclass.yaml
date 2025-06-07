@@ -18,5 +18,3 @@ spec:
   securityGroupSelectorTerms:
   - tags:
       karpenter.sh/discovery: ${ eks_cluster_name }
-  tags:
-    karpenter.sh/discovery: ${ eks_cluster_name }

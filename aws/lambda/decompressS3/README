@@ -1,0 +1,16 @@
+This directory contains an exported AWS Lambda function, abcdUnpack.zip that will 
+perform GZip decompression on a gzipped S3 object, then delete it.
+
+The lambda function is triggered by ANY s3:ObjectCreated event to a given S3 bucket
+(e.g., abcd-mri). Running this function therefore requires that the execution role
+have permissions on that bucket.  
+
+This was originally used to decompress all the compressed ABCD imaging files 
+while keeping them on S3. It was triggered by doing an aws cp --recursive copy between
+a bucket/prefix containing the compressed files and an output bucket (abcd-mri).
+
+It might be faster to use boto3.s3.transfer or an s3 batch operation, but I couldn't get the
+latter to work and didn't have the time to try the former.  
+
+
+fastUnpack contains alternative versions I was testing that may or may not actually work.

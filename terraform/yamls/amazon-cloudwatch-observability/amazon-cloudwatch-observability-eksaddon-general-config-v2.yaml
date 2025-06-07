@@ -1,0 +1,661 @@
+agent:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: eks.amazonaws.com/compute-type
+            operator: NotIn
+            values:
+            - fargate
+  autoGenerateCert:
+    enabled: true
+    expiryDays: 3650
+  # We'll install this elsewhere so we can customize it
+  certManager:
+    enabled: false
+  # Example configuration here: 
+  # https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Agent-Configuration-File-Details.html
+  # However, don't forget to include the defaults, see: 
+  # https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html#CloudWatch-Observability-EKS-addon-CustomAgentConfig
+  config:
+    {
+      "agent": {
+        "metrics_collection_interval": 10,
+        "run_as_user": "cwagent",
+        "region": "us-east-2"
+      },
+      "metrics": {
+        "aggregation_dimensions": [
+          [
+            "InstanceId"
+          ]
+        ],
+        "append_dimensions": {
+          "ImageId": "${aws:ImageId}",
+          "InstanceId": "${aws:InstanceId}",
+          "InstanceType": "${aws:InstanceType}"
+        },
+        "metrics_destinations": {
+          "cloudwatch": {},
+          "amp": {
+            "workspace_id": "ws-bd7dda74-e863-4d32-91ea-932a70f379ca"
+          }
+        },
+        "namespace": "CWAgent",
+        "metrics_collected": {
+          "cpu": {
+            "measurement": [
+              "cpu_usage_idle",
+              "cpu_usage_iowait",
+              "cpu_usage_user",
+              "cpu_usage_system"
+            ],
+            "metrics_collection_interval": 10,
+            "resources": [
+              "*"
+            ],
+            "totalcpu": false
+          },
+          "disk": {
+            "measurement": [
+              {"name": "used", "rename": "disk_usage", "unit": "Gigabytes"},
+              "used_percent",
+              "inodes_free"
+            ],
+            "metrics_collection_interval": 10,
+            "resources": [
+              "*"
+            ]
+          },
+          "diskio": {
+            "measurement": [
+              "io_time",
+              "write_bytes",
+              "read_bytes"
+            ],
+            "metrics_collection_interval": 10,
+            "resources": [
+              "*"
+            ]
+          },
+          "mem": {
+            "measurement": [
+              "mem_used_percent"
+            ],
+            "metrics_collection_interval": 10
+          },
+          "netstat": {
+            "measurement": [
+              "tcp_established",
+              "tcp_time_wait"
+            ],
+            "metrics_collection_interval": 10
+          },
+          "procstat": [
+            {
+              "pattern": "fastsurfer",
+              "measurement": [
+                "cpu_usage",
+                "memory_data",
+                "memory_swap",
+                "num_threads",
+                "read_bytes",
+                "write_bytes"
+              ]
+            }
+          ],
+          "swap": {
+            "measurement": [
+              "swap_used_percent"
+            ],
+            "metrics_collection_interval": 10
+          }
+        }
+      },
+      "traces": {
+        "traces_collected": {
+          "application_signals": {}
+        }
+      },
+      "logs": {
+        "metrics_collected": {
+          "application_signals": {},
+          "kubernetes": {
+            "enhanced_container_insights": true
+          }
+        }
+      }
+    }
+
+  # The mode for the CloudWatch Agent workload (Can be deployment / daemonset/ statefulset, defaults to daemonset)
+  mode: daemonset
+
+  # The name of the CloudWatch Agent workload
+  # name:
+
+  # The supplemental OpenTelemetry Collector YAML to be supplied to the CloudWatch Agent
+  # NOTE: environment variables (e.g., in relabel_configs) need to be prepended with THREE dollar signs (not just two)
+  # see https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/36160#issuecomment-2471955972
+  otelConfig:
+    # OpenTelemetry Collector Configuration
+    # See: https://github.com/open-telemetry/opentelemetry-operator/blob/main/docs/api/opentelemetrycollectors.md#opentelemetrycollector
+    # also: https://aws-otel.github.io/docs/getting-started/adot-eks-add-on/config-collector-intro
+    # This will be merged with the default configuration of the AWS Distro for OpenTelemetry (ADOT) Collector
+    # used by the amazon-cloudwatch-observability EKS add-on.
+
+    receivers:
+      otlp/cloudpipe:
+        protocols:
+          grpc:
+            endpoint: localhost:4317
+
+          http:
+            endpoint: localhost:4318
+
+      prometheus/cloudpipe:
+        config:
+          # global: # Optional: define global scrape settings if needed
+          #   scrape_interval: 60s
+          #   scrape_timeout: 10s
+
+          scrape_configs:
+            # Job for Argo Workflows Controller
+            # Discovers and scrapes metrics from Argo Workflows controller endpoints.
+            # - Argo Workflows controller typically runs in the 'argo' namespace.
+            # - Metrics are exposed on port 9090 at /metrics.
+            # - Note: Only the leader controller instance will provide full metrics.
+            - job_name: 'argo-workflows-controller'
+              metrics_path: /metrics 
+              # Default scheme. Change to 'https' if your service endpoint uses TLS.
+              scheme: https 
+              kubernetes_sd_configs:
+                - role: endpoints
+                  namespaces:
+                    names:
+                      - 'argo-workflows' # Adjust this if Argo Workflows is installed in a different namespace
+              relabel_configs:
+                # 1. Keep endpoints belonging to the Argo Workflows controller service.
+                # Common service names: 'workflow-controller', 'argo-workflow-controller', 'argo-server' (if it proxies/exposes controller metrics).
+                # Adjust the regex below to match your specific Argo Workflows controller service name.
+                - source_labels: [__meta_kubernetes_service_name]
+                  action: keep
+                  regex: 'argo-workflow-controller(.*)'
+
+                # 2. Keep only the endpoints that are on port 9090.
+                - source_labels: [__meta_kubernetes_endpoint_port_number]
+                  action: keep
+                  regex: '9090'
+
+                # 3. Map useful Kubernetes metadata to Prometheus labels. These can be used as dimensions in CloudWatch.
+                - source_labels: [__meta_kubernetes_namespace]
+                  target_label: Namespace
+                - source_labels: [__meta_kubernetes_pod_name] 
+                  target_label: PodName
+                - source_labels: [__meta_kubernetes_service_name]
+                  target_label: ServiceName
+                # Optional: Capture all labels from the pod associated with the endpoint.
+                - action: labelmap
+                  regex: __meta_kubernetes_pod_label_(.+)
+                  replacement: pod_label_$$$1
+
+            # Job for Karpenter Controller
+            # Discovers and scrapes metrics from Karpenter controller endpoints.
+            # - Karpenter typically runs in the 'karpenter' namespace (but can be 'kube-system').
+            # - Metrics are exposed on port 8080 (default) at /metrics.
+            - job_name: 'karpenter-controller'
+              metrics_path: /metrics # Default is /metrics
+              scheme: https # Default scheme.
+              kubernetes_sd_configs:
+                - role: endpoints
+                  namespaces:
+                    names:
+                      - 'karpenter' # Adjust this if Karpenter is installed in 'kube-system' or another namespace
+              relabel_configs:
+                # 1. Keep endpoints belonging to the Karpenter service, typically named 'karpenter'.
+                - source_labels: [__meta_kubernetes_service_name]
+                  action: keep
+                  regex: 'karpenter'
+
+                # 2. Keep only the endpoints that are on port 8080.
+                - source_labels: [__meta_kubernetes_endpoint_port_number]
+                  action: keep
+                  regex: '8080'
+
+                # 3. Map useful Kubernetes metadata to Prometheus labels.
+                - source_labels: [__meta_kubernetes_namespace]
+                  target_label: Namespace
+                - source_labels: [__meta_kubernetes_pod_name]
+                  target_label: PodName
+                - source_labels: [__meta_kubernetes_service_name]
+                  target_label: ServiceName
+                # Optional: Capture all labels from the pod associated with the endpoint.
+                - action: labelmap
+                  regex: __meta_kubernetes_pod_label_(.+)
+                  replacement: pod_label_$$$1
+
+    processors:
+      batch/cloudpipe:
+
+    extensions:
+      # sigv4auth:
+      #   service: "aps"
+      #   region: "us-east-2"
+      # health_check: {}
+
+    exporters:
+      prometheusremotewrite/cloudpipe:
+        endpoint: "https://aps-workspaces.us-east-2.amazonaws.com/workspaces/ws-bd7dda74-e863-4d32-91ea-932a70f379ca/api/v1/remote_write"
+        auth:
+          authenticator: sigv4auth
+        namespace: "amazon-cloudwatch"
+      debug/cloudpipe:
+        verbosity: detailed
+
+    service:
+      #extensions: [health_check]
+      pipelines:
+        metrics:
+          receivers: [otlp/cloudpipe, prometheus/cloudpipe]
+          processors: [batch/cloudpipe]
+          exporters: [debug/cloudpipe, prometheusremotewrite/cloudpipe]
+
+  nodeSelector:
+    kubernetes.io/os: linux
+  # Replica count to set on the CloudWatch Agent workload (Defaults to 1)
+  replicas: 1
+  # Resource requests/limits of the CloudWatch Agent pod
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 128Mi
+  # Tolerations for CloudWatch Agent for scheduling pods with taints
+  # tolerations:  
+
+  # Update Strategy for the CloudWatch Agent Daemonset
+  # updateStrategy:
+  #   rollingUpdate:
+  #     maxSurge: '0'
+  #     maxUnavailable: '1'
+
+# Admission Webhooks specific configuration
+# admissionWebhooks:
+#   certManager:
+#     enabled: true
+  # Auto generate TLS certs
+  # autoGenerateCert:
+  #   # Enable auto generation of TLS certs
+  #   enabled: true
+  #   # Days to expire for auto generated certs. Defaults to 10 years when not specified.
+  #   expiryDays: 3650
+
+# Container Logging specific configuration
+containerLogs:
+  # Enable container logging on the cluster
+  enabled: true
+  # FluentBit specific configuration
+  fluentBit:
+    # Affinity configuration for the FluentBit Daemonset for scheduling 
+    # pods with compute type excluding Fargate
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: eks.amazonaws.com/compute-type
+              operator: NotIn
+              values:
+              - fargate
+    # The configuration to be supplied to FluentBit...
+    # NOTE: aws-for-fluent-bit (in Amazon Observability CloudWatch) uses lagged versions of fluent-bit
+    # Check the fluent-bit version you're using on the releases page of aws-for-fluent-bit's github repo and
+    # then use the appropriate fluentbit configuration. 
+      # Define the Parsers configuration to be used for FluentBit.
+      # Default configuration: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html#install-CloudWatch-Observability-EKS-addon-configuration
+    config:
+      customParsers: |
+        # [PARSER]
+        #   Name        cri
+        #   Format      regex
+        #   Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<log>.*)$
+        #   Time_Key    time
+        #   Time_Format %Y-%m-%dT%H:%M:%S.%N%z
+        #   # This is the standard CRI (Container Runtime Interface) parser.
+        #   # It captures the timestamp, stream (stdout/stderr), a tag, and the actual log content.
+        #   # %N is for nanoseconds, %z for UTC offset (like 'Z').
+
+        [PARSER]
+          Name        cri
+          Format      regex
+          Regex       ^(?<time>[^ ]+) (stdout|stderr)+ [^ ] (?<log>.*)$
+          Time_Key    time
+          Time_Format %Y-%m-%dT%H:%M:%S.%LZ
+
+
+        [PARSER]
+          Name        python_json
+          Format      json
+          # If your Python app logs in JSON and includes a timestamp, specify Time_Key and Time_Format.
+          # Example: If your JSON log has {"timestamp": "2023-10-27T10:30:00,123Z", "message": "..."}
+          # Time_Key    timestamp
+          # Time_Format %Y-%m-%dT%H:%M:%S,%f%z
+          # If no Time_Key is specified, Fluent Bit uses the time from the CRI log entry.
+          # This parser is intended to be applied to the 'log' field extracted by the 'cri' parser.
+
+        [MULTILINE_PARSER]
+          # This parser helps group Python tracebacks and other multi-line log entries.
+          name          python_multiline
+          python        cri
+          type          regex
+          # Milliseconds to wait for more lines before flushing.
+          flush_timeout 5000 
+          # Defines the start of a new Python log message (often not indented or starts with a timestamp/level).
+          # This rule is critical: adjust it if your Python logs have a very consistent "new log" signature.
+          # For generic Python, we often assume a new log doesn't start with whitespace if the previous did.
+          # More robust: If your logs have a timestamp like "YYYY-MM-DD HH:MM:SS"
+          # rules   | state name        | regex pattern                               | next state
+          # --------|-------------------|-----------------------------------------------------------------
+          rule        "start_state"       ^\s\n                                         "cont"
+          rule        "cont"              ^(?!\s\n).+                                   "cont"
+
+      # Provide the Service section of the FluentBit config to define global properties. 
+      # Default configuration: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html#install-CloudWatch-Observability-EKS-addon-configuration
+      service: |
+        [SERVICE]
+          Flush                       5
+          Daemon                      Off
+          Parsers_File                parsers.conf
+          storage.path                /var/fluent-bit/state/flb-storage/
+          storage.sync                normal
+          storage.checksum            off
+          storage.backlog.mem_limit   5M
+          # Enable HTTP server for diagnostics, health checks (optional but recommended)
+          HTTP_Server                 On
+          HTTP_Listen                 0.0.0.0
+          HTTP_Port                   2020
+
+      extraFiles:
+        argo-workflows-log.conf: |
+          [INPUT]
+            Name                    tail
+            Tag                     argoworkflows.*
+            Path                    /var/log/containers/cloudpipe*argo-workflows*.log
+            # Use the CRI parser for the initial container log format
+            Parser                  cri
+            Mem_Buf_Limit           10MB
+            # Important for multi-line logs that might get stitched into one long line
+            Skip_Long_Lines         Off 
+            # Enable multi-line processing using the parser defined in parsers.conf
+            multiline.parser        python_multiline
+            storage.type            filesystem
+            DB                      /var/fluent-bit/state/flb_argoworkflows.db
+
+          [FILTER]
+            Name                aws
+            Match               argoworkflows.*
+            az                  false
+            ec2_instance_id     false
+            Enable_Entity       true
+
+          [FILTER]
+            # Enrich logs with Kubernetes metadata (essential for context)
+            Name                  kubernetes
+            Match                 argoworkflows.*
+            Kube_URL              https://kubernetes.default.svc:443
+            Kube_Tag_Prefix       argoworkflows.var.log.containers
+            Kube_CA_File          /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            Kube_Token_File       /var/run/secrets/kubernetes.io/serviceaccount/token
+            # Merge_Log On would attempt to parse the 'log' field as JSON and merge its fields
+            # into the top level. This can be useful if your Python logs are *always* JSON.
+            # If they are mixed (text and JSON), it's safer to handle JSON parsing explicitly.
+            Merge_Log             Off
+            # Regex_Parser          kubernetes
+            # Keep Kubernetes annotations and labels
+            Labels                On
+            Annotations           On
+            Use_Kubelet           On
+            Kubelet_Port          10250
+            Buffer_Size           0
+            Use_Pod_Association   On
+            Keep_Log              Off
+
+            # If you want to try parsing the 'log' field as JSON (if your Python app logs JSON)
+            # uncomment the K8S-Logging.Parser and ensure your pods have the annotation.
+            # This is an alternative to the explicit JSON parser filter below.
+            # K8S-Logging.Parser On
+            # K8S-Logging.Exclude Off
+
+          [FILTER]
+            # OPTIONAL: Explicitly parse Python logs as JSON if they are structured.
+            # This filter attempts to parse the 'log' field (which contains the Python app's output) using 'python_json'.
+            # If Merge_Log in the kubernetes filter is On, this might be redundant or conflict.
+            # Use this if Merge_Log is Off or if you need more control.
+            Name                parser
+            Match               argoworkflows.*
+            # The field extracted by the 'cri' parser containing the actual application log
+            Key_Name            log
+            Parser              python_json
+            # Reserve_Data On keeps other fields (like stream, logtag, and the kubernetes block).
+            Reserve_Data        Off
+            # Preserve_Key On would make the 'log' field a nested JSON object.
+            # Preserve_Key Off would lift the fields from the Python JSON into the main record.
+            # Set to Off if you want fields like 'message' from Python JSON at the top level.
+            Preserve_Key Off
+
+          # [FILTER]
+          #   # Add specific Argo Workflow labels/annotations as top-level fields for easier querying.
+          #   # This is useful if you frequently filter or search on these in CloudWatch.
+          #   Name    modify
+          #   Match   kube.*
+          #   # Condition to check if the label exists before trying to add it
+          #   # Note: Fluent Bit's 'Condition' is for 'grep' filter. For 'modify', it will add if key exists.
+          #   # If the label/annotation doesn't exist, the record accessor will likely return null/empty.
+          #   Add argo_workflow ${KUBERNETES_LABELS['workflows.argoproj.io/workflow'] || 'N/A'}
+          #   Add argo_node_name ${KUBERNETES_ANNOTATIONS['workflows.argoproj.io/node-name'] || 'N/A'}
+          #   # You can also use record accessor syntax like $(kubernetes['labels']['workflows.argoproj.io/workflow'])
+          #   # Ensure your Fluent Bit version supports the syntax you choose.
+          #   # For older versions or more complex conditions, a lua filter might be needed.
+
+          [OUTPUT]
+            Name                  cloudwatch_logs
+            Match                 argoworkflows.*
+            region                ${AWS_REGION}
+            log_group_name        /${CLUSTER_NAME}/argoworkflows
+            log_stream_template   $kubernetes['labels']['subjectid']
+            log_stream_prefix     ''
+            auto_create_group     true
+            add_entity            true
+            log_key               log
+            # For EKS with IAM Roles for Service Accounts (IRSA), role_arn is usually not needed.
+            # Ensure the Fluent Bit service account has CloudWatch Logs permissions.
+            # Example permissions:
+            # - logs:CreateLogGroup
+            # - logs:CreateLogStream
+            # - logs:PutLogEvents
+            # - logs:DescribeLogStreams
+            # If sending structured logs and want CloudWatch to understand them better for metrics (EMF)
+            # log_format           json/emf
+
+    # Node selector for the FluentBit Daemonset
+    nodeSelector:
+      kubernetes.io/os: linux
+    # Priority class for the FluentBit Daemonset
+    priorityClassName: system-node-critical
+    # Resource requests/limits of the FluentBit pod
+    resources:
+      limits:
+        cpu: 500m
+        memory: 250Mi
+      requests:
+        cpu: 50m
+        memory: 25Mi
+    # Tolerations for FluentBit DaemonSet scheduling pods with taints
+    # tolerations:
+    
+    # Update Strategy for the FluentBit Daemonset
+    # updateStrategy:
+    #   rollingUpdate:
+    #     maxSurge: '0'
+    #     maxUnavailable: '1'
+
+# DCGM Exporter specific configuration
+dcgmExporter:
+  # Affinity configuration for DCGM Exporter DaemonSet for scheduling pods based on NVIDIA GPU instance types
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.kubernetes.io/instance-types
+            operator: In
+            values:
+            - g3.4xlarge
+            - g3.8xlarge
+            - g3.16xlarge
+            - g3s.xlarge
+            - g4ad.2xlarge
+            - g4ad.4xlarge
+            - g4ad.8xlarge
+            - g4ad.16xlarge
+            - g4ad.xlarge
+            - g4dn.2xlarge
+            - g4dn.4xlarge
+            - g4dn.8xlarge
+            - g4dn.12xlarge
+            - g4dn.16xlarge
+            - g4dn.metal
+            - g4dn.xlarge
+            - g5.2xlarge
+            - g5.4xlarge
+            - g5.8xlarge
+            - g5.12xlarge
+            - g5.16xlarge
+            - g5.24xlarge
+            - g5.48xlarge
+            - g5.xlarge
+            - g5g.2xlarge
+            - g5g.4xlarge
+            - g5g.8xlarge
+            - g5g.16xlarge
+            - g5g.metal
+            - g5g.xlarge
+            - g6.2xlarge
+            - g6.4xlarge
+            - g6.8xlarge
+            - g6.12xlarge
+            - g6.16xlarge
+            - g6.24xlarge
+            - g6.48xlarge
+            - g6.xlarge
+            - g6e.2xlarge
+            - g6e.4xlarge
+            - g6e.8xlarge
+            - g6e.12xlarge
+            - g6e.16xlarge
+            - g6e.24xlarge
+            - g6e.48xlarge
+            - g6e.xlarge
+            - gr6.4xlarge
+            - gr6.8xlarge
+            - p2.8xlarge
+            - p2.16xlarge
+            - p2.xlarge
+            - p3.2xlarge
+            - p3.8xlarge
+            - p3.16xlarge
+            - p3dn.24xlarge
+            - p4d.24xlarge
+            - p4de.24xlarge
+            - p5.48xlarge
+            - p5e.48xlarge
+            - p5en.48xlarge
+            - ml.g3.4xlarge
+            - ml.g3.8xlarge
+            - ml.g3.16xlarge
+            - ml.g3s.xlarge
+            - ml.g4ad.2xlarge
+            - ml.g4ad.4xlarge
+            - ml.g4ad.8xlarge
+            - ml.g4ad.16xlarge
+            - ml.g4ad.xlarge
+            - ml.g4dn.2xlarge
+            - ml.g4dn.4xlarge
+            - ml.g4dn.8xlarge
+            - ml.g4dn.12xlarge
+            - ml.g4dn.16xlarge
+            - ml.g4dn.metal
+            - ml.g4dn.xlarge
+            - ml.g5.2xlarge
+            - ml.g5.4xlarge
+            - ml.g5.8xlarge
+            - ml.g5.12xlarge
+            - ml.g5.16xlarge
+            - ml.g5.24xlarge
+            - ml.g5.48xlarge
+            - ml.g5.xlarge
+            - ml.g5g.2xlarge
+            - ml.g5g.4xlarge
+            - ml.g5g.8xlarge
+            - ml.g5g.16xlarge
+            - ml.g5g.metal
+            - ml.g5g.xlarge
+            - ml.g6.2xlarge
+            - ml.g6.4xlarge
+            - ml.g6.8xlarge
+            - ml.g6.12xlarge
+            - ml.g6.16xlarge
+            - ml.g6.24xlarge
+            - ml.g6.48xlarge
+            - ml.g6.xlarge
+            - ml.g6e.2xlarge
+            - ml.g6e.4xlarge
+            - ml.g6e.8xlarge
+            - ml.g6e.12xlarge
+            - ml.g6e.16xlarge
+            - ml.g6e.24xlarge
+            - ml.g6e.48xlarge
+            - ml.g6e.xlarge
+            - ml.gr6.4xlarge
+            - ml.gr6.8xlarge
+            - ml.p2.8xlarge
+            - ml.p2.16xlarge
+            - ml.p2.xlarge
+            - ml.p3.2xlarge
+            - ml.p3.8xlarge
+            - ml.p3.16xlarge
+            - ml.p3dn.24xlarge
+            - ml.p4d.24xlarge
+            - ml.p4de.24xlarge
+            - ml.p5.48xlarge
+            - ml.p5e.48xlarge
+            - ml.p5en.48xlarge
+  # Node Selector for the DCGM Exporter Daemonset
+  nodeSelector:
+    kubernetes.io/os: linux
+  # Resource requests/limits of the DCGM Exporter pod
+  resources:
+    limits:
+      cpu: 500m
+      memory: 500Mi
+    requests:
+      cpu: 250m
+      memory: 128Mi
+  # Tolerations for scheduling pods with taints
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# CloudWatchAgent Operator specific configuration
+# manager:
+
+# Neuron Monitor specific configuration
+# neuroMonitor:
+
+# Tolerations to apply to all pod workloads installed by the EKS add-on
+# tolerations:
+#   - key: ''
+#     operator: Exists
