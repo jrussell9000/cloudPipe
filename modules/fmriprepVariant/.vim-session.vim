@@ -1,6 +1,6 @@
 " ~/cloudpipe/modules/fmriprepVariant/.vim-session.vim:
 " Vim session script.
-" Created by session.vim 2.13.1 on 05 June 2025 at 21:05:58.
+" Created by session.vim 2.13.1 on 11 June 2025 at 13:38:22.
 " Open this file in Vim and run :source % to restore your session.
 
 if exists('g:syntax_on') != 1 | syntax on | endif
@@ -26,11 +26,11 @@ if &shortmess =~ 'A'
 else
   set shortmess=aoO
 endif
-badd +0 compose.yaml
+badd +0 Dockerfile
 argglobal
 %argdel
-$argadd compose.yaml
-edit compose.yaml
+$argadd Dockerfile
+edit Dockerfile
 argglobal
 setlocal foldmethod=manual
 setlocal foldexpr=0
@@ -42,12 +42,12 @@ setlocal foldnestmax=20
 setlocal foldenable
 silent! normal! zE
 let &fdl = &fdl
-let s:l = 4 - ((3 * winheight(0) + 24) / 49)
+let s:l = 10 - ((9 * winheight(0) + 24) / 49)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 4
-normal! 044|
+keepjumps 10
+normal! 04|
 tabnext 1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
 "   silent exe 'bwipe ' . s:wipebuf

@@ -72,5 +72,5 @@ if __name__ == '__main__':
     s3_bucket_name = 'abcd-v51'
     s3_prefix = 'fmriresults01/abcd-mproc-release5/'  # Ensure this ends with a '/' if it's a directory
     sqs_queue_name = 'cloudpipe-jobqueue.fifo'
-    number_of_objects_to_send = 10  # Set to None to send all objects
+    number_of_objects_to_send = 100  # Set to None to send all objects
     send_s3_objects_to_sqs(s3_bucket_name, s3_prefix, sqs_queue_name, number_of_objects_to_send)

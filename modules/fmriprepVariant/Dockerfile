@@ -10,6 +10,6 @@ RUN mkdir -p /home/fmriprep/input && \
 RUN micromamba install -n fmriprep -c conda-forge PySocks
 
 # fmriprep doesn't limit python warnings in the output....there's a lot
-ENV PYTHONWARNINGS="ignore:UserWarning,ignore:DeprecationWarning,ignore:PendingDeprecationWarning,ignore:FutureWarning"
+ENV PYTHONWARNINGS="ignore::UserWarning,ignore::DeprecationWarning,ignore::PendingDeprecationWarning,ignore::FutureWarning"
 
 USER fmriprep

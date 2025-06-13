@@ -35,7 +35,7 @@ spec:
         resources:
           requests:
             storage: 30Gi
-  
+
   # When to clean up persistent volume claims
   volumeClaimGC: 
     strategy: OnWorkflowCompletion
@@ -79,7 +79,7 @@ spec:
   # This is the master DAG for the entire pipeline
   - name: master-pipeline-dag
     # Limit to the number of pods (job steps) that can run at any one time
-    parallelism: 2
+    parallelism: 1
     dag:
       # Providing each task in the DAG, its dependencies, and any output artifacts to be passed
       tasks:
@@ -109,10 +109,6 @@ spec:
           templateRef:
             name: fmriprep-workflow-template
             template: fmriprep-template
-          # arguments:
-          #   parameters:
-          #     - name: T1w_sessions
-          #       value: '{{tasks.subject-data-inventory-dagtask.outputs.result}}'
           depends: "anatomical-processing-pipeline-dagtask.Succeeded"
 
           arguments:
@@ -128,7 +124,7 @@ spec:
   - name: anatomical-processing-pipeline-dag-template
     # Maximum number of steps in this workflow that can run concurrently (DAG width)
     # Set to 2 per long_fastsurfer_run.sh
-    parallelism: 2
+    parallelism: 1
     inputs:
       parameters:
         # Pull in in the T1w_sessions parameter when calling the DAG template above

@@ -1,6 +1,6 @@
 " ~/cloudpipe/aws/.vim-session.vim:
 " Vim session script.
-" Created by session.vim 2.13.1 on 30 May 2025 at 09:33:47.
+" Created by session.vim 2.13.1 on 10 June 2025 at 10:23:10.
 " Open this file in Vim and run :source % to restore your session.
 
 if exists('g:syntax_on') != 1 | syntax on | endif
@@ -26,11 +26,11 @@ if &shortmess =~ 'A'
 else
   set shortmess=aoO
 endif
-badd +0 deletecustomerpolicies.sh
+badd +0 s3tosqs.py
 argglobal
 %argdel
-$argadd deletecustomerpolicies.sh
-edit deletecustomerpolicies.sh
+$argadd s3tosqs.py
+edit s3tosqs.py
 argglobal
 setlocal foldmethod=manual
 setlocal foldexpr=0
@@ -42,12 +42,12 @@ setlocal foldnestmax=20
 setlocal foldenable
 silent! normal! zE
 let &fdl = &fdl
-let s:l = 5 - ((4 * winheight(0) + 24) / 49)
+let s:l = 75 - ((22 * winheight(0) + 14) / 28)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 5
-normal! 048|
+keepjumps 75
+normal! 033|
 tabnext 1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
 "   silent exe 'bwipe ' . s:wipebuf

@@ -23,7 +23,7 @@ spec:
         effect: NoExecute
       requirements:
       # see: https://karpenter.sh/docs/concepts/scheduling/#well-known-labels
-      # AMD64
+      # AMD64 (x86_64)
       - key: "kubernetes.io/arch"
         operator: In
         values: ["amd64"]
@@ -32,19 +32,19 @@ spec:
         operator: In
         values: ["linux"]
       # Spot instances
-      # - key: "karpenter.sh/capacity-type"
-      #   operator: In
-      #   values: ["spot"]
-      # Instance generation
-      # Karpenter recommends this setting: https://karpenter.sh/docs/concepts/nodepools/#min-values
-      - key: "karpenter.k8s.aws/instance-generation"
-        operator: Gt
-        values: ["2"]
-      # Instance category (first letter)
+      - key: "karpenter.sh/capacity-type"
+        operator: In
+        values: ["spot"]
+      # Instance category (letter at the beginning of an instance type)
       - key: "karpenter.k8s.aws/instance-category"
         operator: In
         values: ["t"]
+      # Instance generation (number following the letter)
+      - key: "karpenter.k8s.aws/instance-generation"
+        operator: Gt
+        values: ["2"] # Ergo, instance type must be T3 or greater
       # Instance memory (in mebibytes)
       - key: "karpenter.k8s.aws/instance-memory"
         operator: Gt
         values: ["8191"]
+

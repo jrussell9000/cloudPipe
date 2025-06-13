@@ -212,21 +212,6 @@ spec:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_bold.json'
         optional: true
 
-      # SST
-      ## Run-01
-      ### NIFTI
-      # - name: sst-run-1
-      #   path: /home/fmriprep/input/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-sst_run-01_bold.nii
-      #   s3:
-      #     key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-sst_run-01_bold.nii'
-      #   optional: true
-      # ### JSON
-      # - name: sst-run-1-json
-      #   path: /home/fmriprep/input/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-sst_run-01_bold.json
-      #   s3:
-      #     key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-sst_run-01_bold.json'
-      #   optional: true
-
     outputs:
       artifacts:
       - name: fmriprep-output
@@ -238,20 +223,28 @@ spec:
           region: us-east-2
 
     nodeSelector:
-      karpenter.sh/nodepool: al2023-intel-heavy-storage-nodepool
+      karpenter.sh/nodepool: al2023-intel-heavy-nodepool
     
+    # If FastSurfer has to start over due to pod deletion, it will leave behind the isRunning files
+    # fmriprep will crash if these are present
+    initContainers:
+      - name: clear-is-running
+        image: alpine:latest
+        command: ["find", "/opt/freesurfer/subjects", "-name", "*IsRunning*", "-delete"]
+        mirrorVolumeMounts: true
+
     container:
       # fmriprep crashes hard when its not run as root - too lazy to resolve this
       securityContext:
         runAsUser: 0
-      imagePullPolicy: IfNotPresent
+      imagePullPolicy: Always
       # Pull from our public repository containing slightly modified fmriprep images
       image: public.ecr.aws/l9e7l1h1/cloudpipe/fmriprep:latest
 
       # Silencing the horde of Python warnings fmriprep spits out - seriously...
       env:
         - name: PYTHONWARNINGS
-          value: "ignore::Warning"
+          value: "ignore"
 
       volumeMounts:
         # fmriprep base directory
@@ -284,9 +277,9 @@ spec:
 
       resources:
         requests:
-          memory: 32Gi
-          cpu: "16"
-          ephemeral-storage: 50G
+          memory: 24G
+          cpu: '8'
+          # ephemeral-storage: 50G
           
       args:
         - '--skip-bids-validation'
@@ -303,8 +296,6 @@ spec:
         # ABCD MinProc data is already fieldmap corrected (source?)
         - '--ignore'
         - 'fieldmaps'
-        - '--cifti-output'
-        - '170k'
         # Include these arguments to ensure replicable outputs
         - '--skull-strip-fixed-seed'
         - '--random-seed'

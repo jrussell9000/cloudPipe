@@ -110,14 +110,8 @@ spec:
     nodeSelector:
       karpenter.sh/nodepool: al2023-gpu-nodepool
 
-    initContainers:
-      - name: clear-is-running
-        image: alpine:latest
-        command: ["find", "/opt/freesurfer/subjects", "-name", "*IsRunning*", "-delete"]
-        mirrorVolumeMounts: true
-        
     container:
-      imagePullPolicy: Always
+      imagePullPolicy: IfNotPresent
       image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
       
       volumeMounts:
@@ -134,12 +128,20 @@ spec:
 
       resources:
         requests:
-          memory: 16G
-          cpu: '16'
+          memory: 16Gi
+          cpu: 16000m
+          # cpu: '{{=len(jsonpath(inputs.parameters.T1w_sessions, "$"))*2}}'
         limits:
           nvidia.com/gpu: '1'
           
       command: [bash, -c]
-      args: ["/fastsurfer/recon_surf/long_prepare_template.sh {{inputs.parameters.fastsurfer-command-string}}"]
+      # args: ["/fastsurfer/recon_surf/long_prepare_template.sh {{inputs.parameters.fastsurfer-command-string}}"]
+      args:
+        - '/fastsurfer/recon_surf/long_prepare_template.sh'
+        - '--tid'
+        - '{{workflow.parameters.subjID}}_template'
+        - '--t1s'
+        - '{{inputs.artifacts.T1w_Y0.path}}'
+
 
 

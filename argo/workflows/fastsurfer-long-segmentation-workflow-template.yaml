@@ -36,7 +36,7 @@ spec:
     inputs:
       parameters:
         - name: T1w_sessions
-    
+    # In theory, it should be possible to replace all this with expr code in the fastsurfer container args. In theory...
     script:
       image: python:3.12.9-slim-bookworm
       command: [python]
@@ -59,8 +59,14 @@ spec:
     nodeSelector:
       karpenter.sh/nodepool: al2023-gpu-nodepool
 
+    initContainers:
+      - name: clear-is-running
+        image: alpine:latest
+        command: ["find", "/opt/freesurfer/subjects", "-name", "*IsRunning*", "-delete"]
+        mirrorVolumeMounts: true
+        
     container:
-      imagePullPolicy: IfNotPresent
+      imagePullPolicy: Always
       # deepmi/fastsurfer does NOT explicitly add a nonroot user to the image - which seems to be a requirement for containerd
       # we'll just create a variant that does add the nonroot user (and their user directory)
       image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
@@ -75,8 +81,8 @@ spec:
 
       resources:
         requests:
-          memory: 16Gi
-          cpu: 8000m
+          memory: 8G
+          cpu: '4'
         limits:
           nvidia.com/gpu: '1'
 
