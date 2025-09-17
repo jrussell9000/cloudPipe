@@ -7,5 +7,6 @@ parameters:
   provisioningMode: efs-ap
   fileSystemId: ${efs_id}
   directoryPerms: "700"
+  az: "us-east-2a"
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer

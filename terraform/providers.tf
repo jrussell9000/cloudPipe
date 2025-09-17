@@ -2,7 +2,7 @@ provider "aws" {
   region = local.region
 }
 
-# This provider is required for ECR to authenticate with public repos. 
+# This provider is required for ECR to authenticate with public repos.
 # ECR authentication requires us-east-1 as region hence its hardcoded below.
 provider "aws" {
   region = "us-east-1"
@@ -10,16 +10,19 @@ provider "aws" {
 }
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host                   = module.eks.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-    exec {
+
+    exec = {
       api_version = "client.authentication.k8s.io/v1beta1"
-      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
       command     = "aws"
+      # This requires the awscli to be installed locally where Terraform is executed
+      args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
     }
   }
 }
+
 
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
@@ -69,6 +72,11 @@ data "aws_partition" "current" {}
 data "aws_ecrpublic_authorization_token" "token" {
   provider = aws.virginia
 }
+
+data "http" "myip" {
+  url = "https://ipv4.icanhazip.com"
+}
+
 
 locals {
   name   = var.name

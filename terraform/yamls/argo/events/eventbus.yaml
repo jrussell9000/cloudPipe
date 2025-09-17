@@ -4,6 +4,10 @@ metadata:
   name: default
   namespace: argo-events
 spec:
+  # Not yet officially supported by Argo Events
+  # see: https://github.com/argoproj/argo-events/issues/3142
+  # jetstream:
+  #   version: 2.11.6
   nats:
     native:
       # Optional, defaults to 3. If it is < 3, set it to 3, that is the minimal requirement.

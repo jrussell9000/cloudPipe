@@ -1,23 +1,10 @@
 #################################################################################
 # EKS/K8s Addons
 #################################################################################
-resource "kubernetes_annotations" "gp2_default" {
-  annotations = {
-    "storageclass.kubernetes.io/is-default-class" : "false"
-  }
-  api_version = "storage.k8s.io/v1"
-  kind        = "StorageClass"
-  metadata {
-    name = "gp2"
-  }
-  force = true
-
-  depends_on = [module.eks]
-}
 
 resource "kubernetes_storage_class" "ebs_csi_encrypted_gp3_storage_class" {
   metadata {
-    name = "gp3"
+    name = "ebs-sc"
     annotations = {
       "storageclass.kubernetes.io/is-default-class" : "true"
     }
@@ -26,112 +13,187 @@ resource "kubernetes_storage_class" "ebs_csi_encrypted_gp3_storage_class" {
   storage_provisioner    = "ebs.csi.aws.com"
   reclaim_policy         = "Delete"
   allow_volume_expansion = true
-  volume_binding_mode    = "WaitForFirstConsumer"
+  volume_binding_mode    = "Immediate"
   parameters = {
     fsType    = "xfs"
     encrypted = true
     type      = "gp3"
   }
 
-  depends_on = [kubernetes_annotations.gp2_default]
+  depends_on = [helm_release.aws_ebs_csi_driver]
 }
 
 
-locals {
-  cluster_secretstore_name = "external-secrets-clusterstore"
-  cluster_secretstore_sa   = "external-secrets-sa"
-  # Argo Workflows db secrets must be in the same namespace as the controller
-  # https://github.com/argoproj/argo-helm/blob/main/charts/argo-workflows/values.yaml#L187
-}
+# #---------------------------------------------------------------
+# # EKS Blueprints Addons
+# #---------------------------------------------------------------
+# module "eks_blueprints_addons" {
+#   source  = "aws-ia/eks-blueprints-addons/aws"
+#   version = "~> 1.0"
 
-module "aws_ebs_csi_pod_identity" {
-  source = "terraform-aws-modules/eks-pod-identity/aws"
+#   cluster_name      = module.eks.cluster_name
+#   cluster_endpoint  = module.eks.cluster_endpoint
+#   cluster_version   = module.eks.cluster_version
+#   oidc_provider_arn = module.eks.oidc_provider_arn
 
-  name = "aws-ebs-csi-pod-identity"
+#   # CoreDNS Autoscaler helps to scale for large EKS Clusters
+#   # Further tuning for CoreDNS is to leverage NodeLocal DNSCache -> https://kubernetes.io/docs/tasks/administer-cluster/nodelocaldns/
+#   #---------------------------------------------------------------
+#   enable_cluster_proportional_autoscaler = true
+#   cluster_proportional_autoscaler = {
+#     values = [templatefile("${path.module}/helm-values/coredns-autoscaler-values.yaml", {
+#       target = "deployment/coredns"
+#     })]
+#     description = "Cluster Proportional Autoscaler for CoreDNS Service"
+#   }
+# }
 
-  attach_aws_ebs_csi_policy = true
 
-  association_defaults = {
-    namespace       = "kube-system"
-    service_account = "ebs-csi-controller-sa"
-  }
-  associations = {
-    eks = {
-      cluster_name = module.eks.cluster_name
-    }
-  }
-}
+module "external_secrets_irsa_role" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~>6.0"
 
-module "ebs_csi_irsa_role" {
-  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-
-  role_name             = "ebs-csi"
-  attach_ebs_csi_policy = true
-
+  name                                               = "external-secrets-irsa-role"
+  attach_external_secrets_policy                     = true
+  external_secrets_secrets_manager_create_permission = true
+  external_secrets_ssm_parameter_arns                = ["arn:aws:ssm:*:*:parameter/*"]
+  external_secrets_secrets_manager_arns              = ["arn:aws:secretsmanager:*:*:secret:*"]
+  external_secrets_kms_key_arns                      = ["arn:aws:kms:*:*:key/*"]
   oidc_providers = {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
+      namespace_service_accounts = ["external-secrets:external-secrets-sa"]
     }
   }
 }
 
-#---------------------------------------------------------------
-# EKS Blueprints Addons
-#---------------------------------------------------------------
-module "eks_blueprints_addons" {
-  source  = "aws-ia/eks-blueprints-addons/aws"
-  version = "~> 1.0"
+resource "helm_release" "external_secrets" {
+  name             = "external-secrets"
+  repository       = "https://charts.external-secrets.io"
+  chart            = "external-secrets"
+  namespace        = "external-secrets"
+  create_namespace = true
+  cleanup_on_fail  = true
+  recreate_pods    = true
 
-  cluster_name      = module.eks.cluster_name
-  cluster_endpoint  = module.eks.cluster_endpoint
-  cluster_version   = module.eks.cluster_version
-  oidc_provider_arn = module.eks.oidc_provider_arn
-
-  eks_addons = {
-    aws-ebs-csi-driver = {
-      most_recent              = true
-      service_account_role_arn = module.ebs_csi_irsa_role.iam_role_arn
-    }
-  }
-
-  enable_cert_manager                 = true
-  enable_aws_efs_csi_driver           = true
-  enable_aws_load_balancer_controller = true
-  aws_load_balancer_controller = {
-    set = [
-      {
-        name  = "vpcId"
-        value = module.vpc.vpc_id
-      },
-      {
-        name  = "podDisruptionBudget.maxUnavailable"
-        value = 1
-      },
-      {
-        # Cert-manager, external-secrets kick back errors if not set to false
-        name  = "enableServiceMutatorWebhook"
-        value = "false"
-      }
-    ]
-  }
-
-  # EKS Blueprints Addons installs the helm release, creates the IRSA account, 
-  # and attaches the policy but does not set up the secret store
-  enable_external_secrets = true
-  # Defining the SA so we can reference it later
-  external_secrets = {
-    service_account_name = "external-secrets-sa"
-  }
-}
-
-# Sleep for 15 seconds to give the blueprints extra time to finish setting up
-resource "time_sleep" "blueprints_addons_sleep" {
-  depends_on = [
-    module.eks_blueprints_addons
+  values = [
+    <<-EOT
+    serviceAccount:
+      name: "external-secrets-sa"
+      annotations:
+          eks.amazonaws.com/role-arn: "${module.external_secrets_irsa_role.arn}"
+    EOT
   ]
-  create_duration = "15s"
 }
+
+module "aws_ebs_csi_pod_identity" {
+  source                    = "terraform-aws-modules/eks-pod-identity/aws"
+  name                      = "aws-ebs-csi-pod-identity"
+  attach_aws_ebs_csi_policy = true
+  aws_ebs_csi_kms_arns      = ["arn:aws:kms:*:*:key/*"]
+  associations = {
+    cloudpipe = {
+      cluster_name    = "${var.name}"
+      namespace       = "kube-system"
+      service_account = "ebs-csi-controller-sa"
+    }
+  }
+}
+
+resource "helm_release" "aws_ebs_csi_driver" {
+  name             = "aws-ebs-csi-driver"
+  repository       = "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
+  chart            = "aws-ebs-csi-driver"
+  namespace        = "kube-system"
+  create_namespace = false
+  cleanup_on_fail  = true
+  recreate_pods    = true
+}
+
+module "aws_efs_csi_pod_identity" {
+  source                    = "terraform-aws-modules/eks-pod-identity/aws"
+  name                      = "aws-efs-csi"
+  attach_aws_efs_csi_policy = true
+
+  associations = {
+    cloudpipe = {
+      cluster_name    = "${module.eks.cluster_name}"
+      namespace       = "kube-system"
+      service_account = "efs-csi-controller-sa"
+    }
+  }
+}
+
+resource "helm_release" "aws_efs_csi_driver" {
+  name             = "aws-efs-csi-driver"
+  repository       = "https://kubernetes-sigs.github.io/aws-efs-csi-driver/"
+  chart            = "aws-efs-csi-driver"
+  namespace        = "kube-system"
+  create_namespace = false
+  cleanup_on_fail  = true
+
+  # https://github.com/kubernetes-sigs/aws-efs-csi-driver/blob/master/charts/aws-efs-csi-driver/values.yaml
+  values = [
+    <<-EOT
+    controller:
+      # Delete the path on EFS when deleting an access point
+      deleteAccessPointRootDir: true
+      # see: https://github.com/kubernetes-sigs/aws-efs-csi-driver?tab=readme-ov-file#timeouts
+      timeout: 60s
+    tolerations:
+      - key: "CriticalAddonsOnly"
+        value: "true"
+        effect: "NoSchedule"
+    node:
+      volMetricsOptIn: true
+    EOT
+  ]
+}
+
+
+data "aws_route53_zone" "brc" {
+  name = "braveresearchcollaborative.org"
+}
+
+module "cert_manager_pod_identity" {
+  source = "terraform-aws-modules/eks-pod-identity/aws"
+
+  name = "cert-manager"
+
+  attach_cert_manager_policy    = true
+  cert_manager_hosted_zone_arns = [data.aws_route53_zone.brc.arn]
+
+  # Pod Identity Associations
+  associations = {
+    cloudpipe = {
+      cluster_name = "${module.eks.cluster_name}"
+      # These are the default namespace and SA in cert-manager
+      namespace       = "cert-manager"
+      service_account = "cert-manager"
+    }
+  }
+  depends_on = [helm_release.cert-manager]
+}
+
+resource "helm_release" "cert-manager" {
+  name             = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager"
+  namespace        = "cert-manager"
+  create_namespace = true
+  cleanup_on_fail  = true
+
+  values = [
+    <<-EOT
+    crds:
+      enabled: true
+    extraEnv:
+      - name: AWS_REGION
+        value: ${var.region}
+    EOT
+  ]
+}
+
 
 # resource "helm_release" "awspca" {
 #   name       = "aws-privateca-issuer"
@@ -140,10 +202,85 @@ resource "time_sleep" "blueprints_addons_sleep" {
 #   version    = "~>1.0"
 # }
 
-/***********************************
-* NVIDIA GPU Operator Installation *
-************************************/
-# Installing the NVIDIA GPU Operator 
+# data "aws_iam_policy_document" "assume_role" {
+#   statement {
+#     effect = "Allow"
+
+#     principals {
+#       type        = "Service"
+#       identifiers = ["pods.eks.amazonaws.com"]
+#     }
+
+#     actions = [
+#       "sts:AssumeRole",
+#       "sts:TagSession"
+#     ]
+#   }
+# }
+
+# resource "aws_iam_role" "kube-image-keeper" {
+#   name               = "kube-image-keeper-registry-role"
+#   assume_role_policy = data.aws_iam_policy_document.assume_role.json
+# }
+
+# resource "aws_iam_role_policy_attachment" "ecr_access" {
+#   policy_arn = "arn:aws:iam::aws:policy/AmazonElasticContainerRegistryPublicFullAccess"
+#   role       = aws_iam_role.kube-image-keeper.name
+# }
+
+# resource "aws_iam_role_policy_attachment" "efs_access" {
+#   policy_arn = "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientFullAccess"
+#   role       = aws_iam_role.kube-image-keeper.name
+# }
+
+# resource "helm_release" "kube-image-keeper" {
+#   name             = "kube-image-keeper"
+#   repository       = "https://charts.enix.io"
+#   chart            = "kube-image-keeper"
+#   namespace        = "kuik-system"
+#   create_namespace = true
+
+#   values = [
+#     <<-EOT
+#     registry:
+#       persistence:
+#         enabled: true
+#         accessModes: 'ReadWriteMany'
+#         storageClass: nfs
+#         size: 100Gi
+#     controllers:
+#       webhook:
+#         ignoredImages:
+#           - .*cloudwatch.*
+#         ignoredNamespaces:
+#           - amazon-cloudwatch
+#     EOT
+#   ]
+# }
+
+# resource "aws_eks_pod_identity_association" "kube-image-keeper-registry" {
+#   cluster_name    = module.eks.cluster_name
+#   namespace       = "kuik-system"
+#   service_account = "kube-image-keeper-registry"
+#   role_arn        = aws_iam_role.kube-image-keeper.arn
+
+#   depends_on = [helm_release.kube-image-keeper]
+# }
+
+# resource "aws_eks_pod_identity_association" "kube-image-keeper-controllers" {
+#   cluster_name    = module.eks.cluster_name
+#   namespace       = "kuik-system"
+#   service_account = "kube-image-keeper-controllers"
+#   role_arn        = aws_iam_role.kube-image-keeper.arn
+
+#   depends_on = [helm_release.kube-image-keeper]
+# }
+
+
+# /***********************************
+# * NVIDIA GPU Operator Installation *
+# ************************************/
+# Installing the NVIDIA GPU Operator
 # https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html
 resource "helm_release" "gpu_operator" {
   name             = "gpu-operator"
@@ -155,86 +292,50 @@ resource "helm_release" "gpu_operator" {
   atomic           = true
   cleanup_on_fail  = true
 
-  # Chart Customization Options: 
+  values = [
+    <<-EOT
+    tolerations:
+      - key: "CriticalAddonsOnly"
+        value: "true"
+        effect: "NoSchedule"
+    EOT
+  ]
+  # Chart Customization Options:
   # https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html#chart-customization-options
-  # Note: Need to specify the driver version and update it as necessary get
-  set {
-    name  = "driver.enabled"
-    value = "false"
-  }
-
-  set {
-    name  = "toolkit.enabled"
-    value = "false"
-  }
-
-  set {
-    name  = "mig.strategy"
-    value = "single"
-  }
-
-  set {
-    name  = "migManager.enabled"
-    value = "true"
-  }
-
-  set {
-    name  = "operator.runtimeClass"
-    value = "nvidia"
-  }
-
-  set {
-    name  = "migManager.env[0].name"
-    value = "WITH_REBOOT"
-  }
-
-  set {
-    name  = "migManager.env[0].value"
-    value = "true"
-    type  = "string"
-  }
-
-  set {
-    name  = "migManager.default"
-    value = "all-1g.10gb"
-  }
-}
-
-#---------------------------------------------------------------
-# Grafana Admin credentials resources
-#---------------------------------------------------------------
-# data "aws_secretsmanager_secret_version" "admin_password_version" {
-#   secret_id  = aws_secretsmanager_secret.grafana.id
-#   depends_on = [aws_secretsmanager_secret_version.grafana]
-# }
-
-# resource "random_password" "grafana" {
-#   length           = 16
-#   special          = true
-#   override_special = "@_"
-# }
-
-# #tfsec:ignore:aws-ssm-secret-use-customer-key
-# resource "aws_secretsmanager_secret" "grafana" {
-#   name                    = "${local.name}-grafana"
-#   recovery_window_in_days = 0 # Set to zero for this example to force delete during Terraform destroy
-# }
-
-# resource "aws_secretsmanager_secret_version" "grafana" {
-#   secret_id     = aws_secretsmanager_secret.grafana.id
-#   secret_string = random_password.grafana.result
-# }
-
-
-resource "helm_release" "kubecost" {
-
-  name             = "kubecost"
-  repository       = "oci://public.ecr.aws/kubecost"
-  chart            = "cost-analyzer"
-  version          = "2.7.2"
-  namespace        = "kubecost"
-  create_namespace = true
-  atomic           = true
-  cleanup_on_fail  = true
-  values           = [file("${path.module}/helm-values/kubecost/values-eks-cost-monitoring.yaml")]
+  set = [
+    {
+      # The AL2023_x86_64_NVIDIA AMI comes prepackaged with NVIDIA drivers
+      name  = "driver.enabled"
+      value = "false"
+    },
+    {
+      name  = "toolkit.enabled"
+      value = "false"
+    },
+    {
+      name  = "mig.strategy"
+      value = "single"
+    },
+    {
+      name  = "migManager.enabled"
+      value = "true"
+    },
+    {
+      name  = "operator.runtimeClass"
+      value = "nvidia"
+    },
+    {
+      name  = "migManager.env[0].name"
+      value = "WITH_REBOOT"
+    },
+    {
+      name  = "migManager.env[0].value"
+      value = "true"
+      type  = "string"
+    },
+    {
+      name  = "migManager.default"
+      value = "all-1g.10gb"
+    }
+  ]
 }

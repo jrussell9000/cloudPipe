@@ -17,31 +17,6 @@ resource "aws_prometheus_workspace" "amp" {
   alias = "${var.name}-amp"
 }
 
-# Creating an IRSA for AMP metric ingestion
-resource "aws_iam_role" "amp_ingestion" {
-  name        = "amp-ingestion-role"
-  description = "AMP metric ingestion role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = "${module.eks.oidc_provider_arn}"
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            # Compare the OIDC audience claim to ensure it's for this service account
-            # Specify the SA namespace as described here: https://aws-otel.github.io/docs/getting-started/prometheus-remote-write-exporter/eks#editing-the-trust-policy
-            "${module.eks.oidc_provider}:sub" = "system:serviceaccount:${kubernetes_service_account_v1.acwo_sa.metadata[0].name}:amp-iamproxy-ingest-service-account"
-          }
-        }
-      }
-    ]
-  })
-}
-
 resource "aws_iam_policy" "amp_ingestion" {
   name = "AMPIngestionPolicy"
   path = "/"
@@ -65,19 +40,87 @@ resource "aws_iam_policy" "amp_ingestion" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "amp_ingestion" {
-  role       = aws_iam_role.amp_ingestion.name
-  policy_arn = aws_iam_policy.amp_ingestion.arn
-}
+# Managed Collectors
 
-resource "kubernetes_service_account_v1" "amp_ingestion" {
-  metadata {
-    name      = "amp-iamproxy-ingest-service-account"
-    namespace = kubernetes_namespace_v1.amazon_cloudwatch.metadata[0].name
-    annotations = {
-      "eks.amazonaws.com/role-arn" = aws_iam_role.amp_ingestion.arn
+resource "aws_prometheus_scraper" "this" {
+  source {
+    eks {
+      cluster_arn = module.eks.cluster_arn
+      subnet_ids  = module.vpc.private_subnets
     }
   }
+
+  destination {
+    amp {
+      workspace_arn = aws_prometheus_workspace.amp.arn
+    }
+  }
+
+  scrape_configuration = <<EOT
+global:
+  scrape_interval: 30s
+  external_labels:
+    clusterArn: ${module.eks.cluster_arn}
+scrape_configs:
+  # pod metrics
+  - job_name: pod_exporter
+    kubernetes_sd_configs:
+      - role: pod
+  # container metrics
+  - job_name: cadvisor
+    scheme: https
+    authorization:
+      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+  # apiserver metrics
+  - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    job_name: kubernetes-apiservers
+    kubernetes_sd_configs:
+    - role: endpoints
+    relabel_configs:
+    - action: keep
+      regex: default;kubernetes;https
+      source_labels:
+      - __meta_kubernetes_namespace
+      - __meta_kubernetes_service_name
+      - __meta_kubernetes_endpoint_port_name
+    scheme: https
+  # kube proxy metrics
+  - job_name: kube-proxy
+    honor_labels: true
+    kubernetes_sd_configs:
+    - role: pod
+    relabel_configs:
+    - action: keep
+      source_labels:
+      - __meta_kubernetes_namespace
+      - __meta_kubernetes_pod_name
+      separator: '/'
+      regex: 'kube-system/kube-proxy.+'
+    - source_labels:
+      - __address__
+      action: replace
+      target_label: __address__
+      regex: (.+?)(:d+)?
+      replacement: $1:10249
+  - job_name: karpenter
+    honor_labels: true
+    kubernetes_sd_configs:
+    - role: endpoints
+      namespaces:
+        names:
+          - 'kube-system'
+EOT
 }
 
 # AMAZON CLOUDWATCH OBSERVABILITY (ACWO) #
@@ -95,7 +138,7 @@ data "aws_iam_policy_document" "acwo_assume_pod_identity" {
   }
 }
 
-# Creating an IAM role for the CloudWatch Agent and attaching the trust policy (assume_role) 
+# Creating an IAM role for the CloudWatch Agent and attaching the trust policy (assume_role)
 resource "aws_iam_role" "acwo" {
   name               = "AmazonEKSCloudWatchAgentPodRole"
   assume_role_policy = data.aws_iam_policy_document.acwo_assume_pod_identity.json
@@ -117,40 +160,30 @@ resource "aws_iam_role_policy_attachment" "acwo" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
-# Create CloudWatch service account (using default name: "cloudwatch-agent") and linking to IAM role
-resource "kubernetes_service_account_v1" "acwo_sa" {
-  metadata {
-    name      = "cloudwatch-agent"
-    namespace = kubernetes_namespace_v1.amazon_cloudwatch.metadata[0].name
-    annotations = {
-      "eks.amazonaws.com/role-arn" = aws_iam_role.acwo.arn
+resource "helm_release" "amazon_cloudwatch_observability" {
+  name             = "amazon-cloudwatch"
+  repository       = "https://aws-observability.github.io/helm-charts"
+  chart            = "amazon-cloudwatch-observability"
+  namespace        = "amazon-cloudwatch"
+  create_namespace = true
+  wait             = false
+
+  values = [file("${path.module}/helm-values/acwo/values.yaml")]
+  set = [
+    {
+      name  = "clusterName"
+      value = var.name
+    },
+    {
+      name  = "region"
+      value = var.region
+    },
+    {
+      name  = "agent.otelConfig.exporters.prometheusremotewrite/cloudpipe.endpoint"
+      value = "${aws_prometheus_workspace.amp.prometheus_endpoint}api/v1/remote_write"
     }
-  }
+  ]
 }
-
-# Getting the latest version of the amazon-cloudwatch-observability EKS addon
-data "aws_eks_addon_version" "acwo" {
-  addon_name         = "amazon-cloudwatch-observability"
-  kubernetes_version = var.kubernetes_version
-  most_recent        = true
-}
-
-# Installing the ACWO add-on
-resource "aws_eks_addon" "acwo" {
-  cluster_name  = var.name
-  addon_name    = data.aws_eks_addon_version.acwo.id
-  addon_version = data.aws_eks_addon_version.acwo.version
-  pod_identity_association {
-    role_arn        = aws_iam_role.acwo.arn
-    service_account = kubernetes_service_account_v1.acwo_sa.metadata[0].name
-  }
-  configuration_values = file("${path.module}/yamls/amazon-cloudwatch-observability/amazon-cloudwatch-observability-eksaddon-general-config-v2.yaml")
-
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "OVERWRITE"
-}
-
-
 
 # AMAZON MANAGED GRAFANA #
 
@@ -221,9 +254,68 @@ resource "aws_iam_policy" "grafana_amp_access_policy" {
   policy      = data.aws_iam_policy_document.grafana_amp_access_policy.json
 }
 
+
+data "aws_iam_policy_document" "grafana_cloudwatch_access" {
+  statement {
+    sid    = "AllowReadingMetricsFromCloudWatch"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:DescribeAlarmsForMetric",
+      "cloudwatch:DescribeAlarmHistory",
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:ListMetrics",
+      "cloudwatch:GetMetricData",
+      "cloudwatch:GetInsightRuleReport"
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "AllowReadingResourceMetricsFromPerformanceInsights"
+    effect    = "Allow"
+    actions   = ["pi:GetResourceMetrics"]
+    resources = ["*"]
+  }
+  statement {
+    sid    = "AllowReadingLogsFromCloudWatch"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:GetLogGroupFields",
+      "logs:StartQuery",
+      "logs:StopQuery",
+      "logs:GetQueryResults",
+      "logs:GetLogEvents"
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "AllowReadingTagsInstancesRegionsFromEC2"
+    effect    = "Allow"
+    actions   = ["ec2:DescribeTags", "ec2:DescribeInstances", "ec2:DescribeRegions"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "AllowReadingResourcesForTags"
+    effect    = "Allow"
+    actions   = ["tag:GetResources"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "grafana_cloudwatch_access" {
+  name        = "${var.name}-grafana-cloudwatch-access-policy"
+  description = "Allows Grafana to access a Cloudwatch data source"
+  policy      = data.aws_iam_policy_document.grafana_cloudwatch_access.json
+}
+
 resource "aws_iam_role_policy_attachment" "grafana_amp_access_attachment" {
   role       = aws_iam_role.grafana_workspace_role.name
   policy_arn = aws_iam_policy.grafana_amp_access_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "grafana_cloudwatch_access_attachment" {
+  role       = aws_iam_role.grafana_workspace_role.name
+  policy_arn = aws_iam_policy.grafana_cloudwatch_access.arn
 }
 
 resource "aws_grafana_workspace" "amg" {
@@ -281,3 +373,53 @@ resource "helm_release" "prometheus_crds" {
   atomic           = true
   cleanup_on_fail  = true
 }
+
+#---------------------------------------------------------------
+# Kubecost
+#---------------------------------------------------------------
+
+module "kubecost_pod_identity" {
+  source = "terraform-aws-modules/eks-pod-identity/aws"
+
+  name = "kubecost-cost-analyzer-amp"
+
+  additional_policy_arns = {
+    "AmazonPrometheusQueryAccess"       = "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess"
+    "AmazonPrometheusRemoteWriteAccess" = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
+  }
+
+  # Add EBS permissions policy here
+  associations = {
+    kubecost-cost-analyzer-amp = {
+      cluster_name    = module.eks.cluster_name
+      namespace       = "kubecost"
+      service_account = "kubecost-cost-analyzer-amp"
+    }
+  }
+}
+
+resource "helm_release" "kubecost" {
+
+  name             = "kubecost"
+  repository       = "oci://public.ecr.aws/kubecost"
+  chart            = "cost-analyzer"
+  namespace        = "kubecost"
+  create_namespace = true
+  cleanup_on_fail  = true
+  recreate_pods    = true
+  values = [
+    templatefile("${path.module}/helm-values/kubecost/values-eks-cost-monitoring.yaml",
+      {
+        amp_workspace_id = aws_prometheus_workspace.amp.id
+        region           = var.region
+        cluster_name     = var.name
+      }
+    )
+  ]
+
+  depends_on = [helm_release.aws_ebs_csi_driver,
+    helm_release.cert-manager,
+  module.kubecost_pod_identity]
+}
+
+

@@ -1,6 +1,6 @@
 " ~/cloudpipe/terraform/.vim-session.vim:
 " Vim session script.
-" Created by session.vim 2.13.1 on 21 May 2025 at 21:14:11.
+" Created by session.vim 2.13.1 on 09 August 2025 at 14:21:07.
 " Open this file in Vim and run :source % to restore your session.
 
 if exists('g:syntax_on') != 1 | syntax on | endif
@@ -26,11 +26,11 @@ if &shortmess =~ 'A'
 else
   set shortmess=aoO
 endif
-badd +0 install.sh
+badd +0 ~/.profile
 argglobal
 %argdel
-$argadd install.sh
-edit install.sh
+$argadd ~/.profile
+edit ~/.profile
 argglobal
 setlocal foldmethod=manual
 setlocal foldexpr=0
@@ -42,12 +42,12 @@ setlocal foldnestmax=20
 setlocal foldenable
 silent! normal! zE
 let &fdl = &fdl
-let s:l = 1 - ((0 * winheight(0) + 24) / 49)
+let s:l = 47 - ((46 * winheight(0) + 25) / 50)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 1
-normal! 0
+keepjumps 47
+normal! 019|
 tabnext 1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
 "   silent exe 'bwipe ' . s:wipebuf

@@ -14,15 +14,19 @@ resource "kubernetes_namespace_v1" "argo_events" {
 
 # Install Argo Events
 resource "helm_release" "argo_events" {
-  name             = "argo-events"
-  repository       = "https://argoproj.github.io/argo-helm"
-  chart            = "argo-events"
-  namespace        = kubernetes_namespace_v1.argo_events.metadata[0].name
-  version          = "~>2.4.0"
+  name       = "argo-events"
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-events"
+  namespace  = kubernetes_namespace_v1.argo_events.metadata[0].name
+  # version          = "~>2.4.0"
   create_namespace = false
   wait             = true
   values = [
-    file("${path.module}/helm-values/argo/events/argo-events-values.yaml")
+    <<-EOT
+    webhook:
+      # -- Enable admission webhook. Applies only for cluster-wide installation
+      enabled: true
+    EOT
   ]
 
   depends_on = [kubernetes_namespace_v1.argo_events]
@@ -56,33 +60,51 @@ resource "aws_iam_policy" "sqs_argo_events" {
 }
 
 # Create an IRSA for Argo Events
-module "irsa_argo_events" {
-  source         = "aws-ia/eks-blueprints-addon/aws"
-  version        = "~> 1.0"
-  create_release = false
-  create_policy  = false
-  create_role    = true
-  role_name      = "${local.name}-${var.argo_events_namespace}"
-  role_policies  = { policy_event = aws_iam_policy.sqs_argo_events.arn }
+# module "irsa_argo_events" {
+#   source         = "aws-ia/eks-blueprints-addon/aws"
+#   create_release = false
+#   create_policy  = false
+#   create_role    = true
+#   role_name      = "${local.name}-${var.argo_events_namespace}"
+#   role_policies  = { policy_event = aws_iam_policy.sqs_argo_events.arn }
 
-  oidc_providers = {
-    this = {
-      provider_arn    = module.eks.oidc_provider_arn
-      namespace       = var.argo_events_namespace
-      service_account = var.argo_events_handler_sa
-    }
+#   oidc_providers = {
+#     this = {
+#       provider_arn    = module.eks.oidc_provider_arn
+#       namespace       = var.argo_events_namespace
+#       service_account = var.argo_events_handler_sa
+#     }
+#   }
+
+#   depends_on = [kubernetes_namespace_v1.argo_events,
+#   aws_iam_policy.sqs_argo_events]
+# }
+
+module "irsa_argo_events" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~>6.0"
+  name    = var.argo_events_handler_sa
+
+  policies = {
+    SQSArgoEventsPolicy = aws_iam_policy.sqs_argo_events.arn
   }
 
-  depends_on = [kubernetes_namespace_v1.argo_events,
-  aws_iam_policy.sqs_argo_events]
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["${var.argo_events_namespace}:${var.argo_events_handler_sa}"]
+    }
+  }
 }
+
+
 
 # Create a service account for Argo Events and annotate it with the arn of the IRSA created above
 resource "kubernetes_service_account_v1" "argo_events_handler_sa" {
   metadata {
     name        = var.argo_events_handler_sa
     namespace   = var.argo_events_namespace
-    annotations = { "eks.amazonaws.com/role-arn" : module.irsa_argo_events.iam_role_arn }
+    annotations = { "eks.amazonaws.com/role-arn" : module.irsa_argo_events.arn }
   }
   automount_service_account_token = true
   depends_on                      = [kubernetes_namespace_v1.argo_events]

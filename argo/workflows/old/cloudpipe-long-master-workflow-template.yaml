@@ -1,44 +1,63 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: cloudpipe-long-master-workflow-template
   namespace: argo-workflows
-  # TO DO: Verify that this annotation is necessary
+  name: cloudpipe-long-master-workflow-template
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::575108944090:role/argo-workflows-s3access
-
+    eks.amazonaws.com/role-arn: arn:aws:iam::575108944090:role/argo-workflows-runner
 
 spec:
-  # Adding subject ID as a label to both the individual workflows and their respective pods
-  # TO DO: Get rid of ndaGUID and replace it with subjectID
+  # Pre-specify metadata for all workflows run from this workflow
   workflowMetadata:
     annotations:
       workflows.argoproj.io/title: "sub-{{workflow.parameters.ndaGUID}}"
+      karpenter.sh/do-not-disrupt: "true"
     labelsFrom:
-      subjectID: 
+      subjectID:
         expression: workflow.parameters.ndaGUID
   podMetadata:
     labels:
       subjectid: "sub-{{workflow.parameters.ndaGUID}}"
 
-  # TO DO: Can this be the controller IRSA (with bucket permissions)?
-  serviceAccountName: argo-workflows-s3access
+  # Create the following persistent volume claim for this workflow
+  volumeClaimTemplates:
+    # Naming the volume claim after the subject ID (for tracking)
+    - metadata:
+        # "Name" should be used to reference this PVC further down the workflow
+        name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Specify a string that will be appended to the string created by generateName in the workflow metadata
+        # By introducing the random character sequence from the metadata, we create a unique PVC for each workflow
+        # run, even if it's for the same subject ID. Neat!
+        generateName: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+      spec:
+        accessModes: [ "ReadWriteMany" ]
+        storageClassName: efs-sc
+        resources:
+          requests:
+          # see https://github.com/kubernetes-sigs/aws-fsx-openzfs-csi-driver/blob/main/examples/kubernetes/dynamic-provisioning/volume/claim.yaml
+          # When dynamically provisioning FSx for OpenZFS volumes, the requested storage value is ignored.
+          # Instead, the CSI driver uses the storageCapacityReservation and storageCapacityQuota parameters to
+          # configure the storage properties of the volume. These values are defined in the storage class.
+          # The value below MUST be explicitly set to 1Gi, otherwise the creation will fail.
+            storage: 50Gi
 
-  # Time to live after workflow is completed, replaces ttlSecondsAfterFinished
-  ttlStrategy:
-    secondsAfterCompletion: 60 
-
-
-  # When to clean up persistent volume claims
-  volumeClaimGC: 
+  podGC:
     strategy: OnWorkflowCompletion
 
-  # When should an individual workflow step be retried and how many times max?
-  retryStrategy:
-    retryPolicy: OnError
-    limit: '1'
+  # When to clean up persistent volume claims
+  volumeClaimGC:
+    strategy: OnWorkflowCompletion
 
-  # MUST include a global security context to ensure artifacts are passed with the same (accessible) 
+  serviceAccountName: argo-workflows-runner
+
+  # Time to live after workflow is completed, replaces ttlSecondsAfterFinished
+  # ttlStrategy:
+  #   secondsAfterCompletion: 60
+
+  podDisruptionBudget:
+    minAvailable: "100%"
+
+  # MUST include a global security context to ensure artifacts are passed with the same (accessible)
   # permissions or else some tasks may not be able to access passed artifacts (this took too long to figure out)
   # see: https://github.com/argoproj/argo-workflows/issues/9651 (can also set 'mode: 755' e.g., to define permissions)
   securityContext:
@@ -46,14 +65,9 @@ spec:
     runAsGroup: 1000
     fsGroup: 1000
 
-  # Where (in templates) to start?
-  entrypoint: master-pipeline-dag
-
-  # Arguments passed at the command line ('-p arg=')
   arguments:
     parameters:
-      # Workflow parameters to be passed in as arguments to the workflow 
-      # (e.g., from the command line) as signified by the lack of value
+      # Workflow parameters passed from command-line (-p) are indicated by lack of an accompanying value
       - name: ndaGUID
       # - name: miNDARpkgID
       # Creating new workflow parameters by modifying existing ones (using expr language)
@@ -61,12 +75,18 @@ spec:
         # Prepending the NDA GUID with 'sub-' per BIDS format
         value: sub-{{workflow.parameters.ndaGUID}}
 
+  # Which template (below) should we start with?
+  entrypoint: master-pipeline-dag
+
   templates:
   # This is the master DAG for the entire pipeline
   - name: master-pipeline-dag
-    # Limit to the number of pods (job steps) that can run at any one time
-    parallelism: 2
+    # Maximum number of pods (job steps) that can run at any one time
+    parallelism: 3
     dag:
+      # Do NOT stop the workflow if one part of the DAG fails
+      # Necessary for subject_sessions that may have only anatomicals, but no functionals
+      failFast: false
       # Providing each task in the DAG, its dependencies, and any output artifacts to be passed
       tasks:
         # What we'll call this task within this document
@@ -75,43 +95,52 @@ spec:
           templateRef:
             # The metadata name of the workflow template
             name: subject-data-inventory-workflow-template
-            # The 'entrypoint' task template within the workflow template
+            # The task template within the larger workflow template to be used as the 'entrypoint'
             template: subject-data-inventory-template
 
-        # Longitudinal timepoint anatomical processing pipeline
+        # Anatomical processing pipeline
         - name: anatomical-processing-pipeline-dagtask
-          # Referencing an in-line DAG template provided below
+          # Reference to an in-line DAG template (provided below)
           template: anatomical-processing-pipeline-dag-template
           depends: "subject-data-inventory-dagtask.Succeeded"
           arguments:
             parameters:
-              # Pass in the output from the subject-data-inventory-dagtask as a parameter named T1w_sessions
+              # Receiving the output from the subject-data-inventory-dagtask as a parameter named T1w_sessions
               - name: T1w_sessions
                 value: '{{tasks.subject-data-inventory-dagtask.outputs.result}}'
 
+        # Functional processing pipeline
         # For each session with a T1, pull all the fmri scans and run them through fmriprep
-        # NOTE: This should be adjusted to pull only sessions with completed fastsurfer runs
-        - name: functional-processing-pipeline-dagtask
+        - name: functional-preprocessing-pipeline-dagtask
           templateRef:
             name: fmriprep-workflow-template
-            template: fmriprep-loop-template
+            template: fmriprep-template
+          depends: "anatomical-processing-pipeline-dagtask.Succeeded"
+
           arguments:
             parameters:
-              - name: T1w_sessions
-                value: '{{tasks.subject-data-inventory-dagtask.outputs.result}}'
-          depends: "anatomical-processing-pipeline-dagtask.Succeeded "
+              - name: session
+                value: '{{item}}'
+          withParam: '{{tasks.subject-data-inventory-dagtask.outputs.result}}'
 
-###################################
-#----- In-line DAG Templates -----#
-###################################
+        # Functional post-processing pipeline
+        - name: functional-postprocessing-pipeline-dagtask
+          templateRef:
+            name: functional-postprocessing-workflow-template
+            template: functional-postprocessing-master-pipeline-dag
+          depends: "functional-processing-pipeline-dagtask.Succeeded"
+
+#######################################
+#----- Anatomical Processing DAG -----#
+#######################################
 
   - name: anatomical-processing-pipeline-dag-template
-    # Maximum number of steps in this workflow that can run concurrently
-    # i.e., maximum width of the DAG in nodes
-    parallelism: 2
+    # Maximum number of steps in this workflow that can run concurrently (DAG width)
+    # Set to 2 per long_fastsurfer_run.sh
+    parallelism: 1
     inputs:
       parameters:
-        # Pull in in the T1w_sessions parameter passed above
+        # Pull in in the T1w_sessions parameter when calling the DAG template above
         - name: T1w_sessions
     dag:
       tasks:
@@ -137,7 +166,7 @@ spec:
 
         # Parcellate the within-subject template
         - name: fastsurfer-template-parcellation-steps
-          templateRef: 
+          templateRef:
             name: fastsurfer-template-parcellation-workflow-template
             template: fastsurfer-template-parcellation-steps-template
           # Template segmentation is a pre-requisite for parcellation
@@ -145,8 +174,9 @@ spec:
             - fastsurfer-template-segmentation-dagtask
 
         # Segment each of the newly-registered session scans
+        # Can be run concurrent to within-subject seg/parc
         - name: fastsurfer-long-segmentation-steps
-          templateRef: 
+          templateRef:
             name: fastsurfer-long-segmentation-workflow-template
             template: fastsurfer-long-segmentation-steps-template
           dependencies:
@@ -161,12 +191,10 @@ spec:
           templateRef:
             name: fastsurfer-long-parcellation-workflow-template
             template: fastsurfer-long-parcellation-steps-template
-          # Segmentation is a prerequisite for parcellation
+          # Requires all previous steps
           dependencies:
             - fastsurfer-long-segmentation-steps
           arguments:
             parameters:
               - name: T1w_sessions
                 value: "{{inputs.parameters.T1w_sessions}}"
-
-

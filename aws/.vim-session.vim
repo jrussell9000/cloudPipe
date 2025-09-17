@@ -1,6 +1,6 @@
 " ~/cloudpipe/aws/.vim-session.vim:
 " Vim session script.
-" Created by session.vim 2.13.1 on 10 June 2025 at 10:23:10.
+" Created by session.vim 2.13.1 on 16 September 2025 at 12:25:53.
 " Open this file in Vim and run :source % to restore your session.
 
 if exists('g:syntax_on') != 1 | syntax on | endif
@@ -42,12 +42,12 @@ setlocal foldnestmax=20
 setlocal foldenable
 silent! normal! zE
 let &fdl = &fdl
-let s:l = 75 - ((22 * winheight(0) + 14) / 28)
+let s:l = 118 - ((23 * winheight(0) + 24) / 49)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 75
-normal! 033|
+keepjumps 118
+normal! 018|
 tabnext 1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
 "   silent exe 'bwipe ' . s:wipebuf

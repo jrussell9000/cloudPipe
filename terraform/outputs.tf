@@ -22,6 +22,11 @@ output "cluster_endpoint" {
   value       = module.eks.cluster_endpoint
 }
 
+output "prometheus_workspace" {
+  description = ""
+  value       = aws_prometheus_workspace.amp.prometheus_endpoint
+}
+
 # output "environment_variables" {
 #   description = "Environment variables to be added to the IDE shell"
 #   value = {

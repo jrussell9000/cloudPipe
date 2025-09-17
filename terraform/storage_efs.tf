@@ -40,17 +40,25 @@ resource "aws_iam_policy" "node_efs_policy" {
 
 # EFS file system
 resource "aws_efs_file_system" "this" {
+  region         = var.region
   creation_token = var.name
+  encrypted      = true
   lifecycle_policy {
-    transition_to_ia = "AFTER_7_DAYS"
+    transition_to_ia = "AFTER_1_DAY"
   }
+  protection {
+    replication_overwrite = "DISABLED"
+  }
+  performance_mode = "generalPurpose"
+  throughput_mode  = "elastic"
 }
 
 # EFS Mount Points - one in each AZ
 resource "aws_efs_mount_target" "efs_mount_targets_private_1" {
   file_system_id  = aws_efs_file_system.this.id
   security_groups = [aws_security_group.efs.id]
-  subnet_id       = module.vpc.private_subnets[0]
+  # Get the first subnet ID, corresponding to the first AZ (specified above for file system)
+  subnet_id = module.vpc.private_subnets[0]
 }
 
 resource "aws_efs_mount_target" "efs_mount_targets_private_2" {
@@ -71,7 +79,7 @@ resource "aws_efs_mount_target" "efs_mount_targets_private_3" {
 # Storageclasses cannot be updated, must be replaced
 # Code below ensures storageclass is replaced every time, regardless of updates
 # see https://stackoverflow.com/a/74944901
-resource "terraform_data" "replacement" {
+resource "terraform_data" "efs_replacement" {
   input = timestamp()
 }
 
@@ -82,7 +90,7 @@ resource "kubectl_manifest" "efs-storage-class" {
 
   lifecycle {
     replace_triggered_by = [
-      terraform_data.replacement
+      terraform_data.efs_replacement
     ]
   }
 }
