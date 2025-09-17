@@ -1,0 +1,33 @@
+name: abcd_nback_custom_confounds
+description: |
+  Nuisance regressors were task regressors convolved with an HRF and motion parameters.
+confounds:
+  motion:
+    dataset: preprocessed
+    query:
+      space: null
+      cohort: null
+      res: null
+      den: null
+      desc: confounds
+      extension: .tsv
+      suffix: timeseries
+    columns:
+    - trans_x
+    - trans_y
+    - trans_z
+    - rot_x
+    - rot_y
+    - rot_z
+  task:
+    dataset: nback_custom
+    query:
+      space: null
+      cohort: null
+      res: null
+      den: null
+      desc: confounds
+      extension: .tsv
+      suffix: timeseries
+    columns:  # Assume the task regressors are called "condition1" and "condition2"
+    - trial_type

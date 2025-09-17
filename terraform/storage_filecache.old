@@ -1,0 +1,140 @@
+data "aws_iam_policy_document" "file_cache_s3_access" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:DeleteObject"
+    ]
+    resources = ["arn:aws:s3:::${var.argo_workflows_bucket}/*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket"
+    ]
+    resources = ["arn:aws:s3:::${var.argo_workflows_bucket}"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:GetBucketLocation"
+    ]
+    resources = ["arn:aws:s3:::*"]
+  }
+}
+
+resource "aws_iam_policy" "file_cache_s3_access" {
+  name   = "aws-file-cache-access-policy"
+  policy = data.aws_iam_policy_document.file_cache_s3_access.json
+}
+
+data "aws_iam_policy_document" "file_cache_ops" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "iam:CreateServiceLinkedRole",
+      "iam:AttachRolePolicy",
+      "iam:PutRolePolicy"
+    ]
+    resources = ["arn:aws:iam::*:role/aws-service-role/s3.data-source.lustre.fsx.amazonaws.com/*"]
+  }
+}
+
+resource "aws_iam_policy" "file_cache_ops" {
+  name   = "AWSFileCacheOperationsPolicy"
+  policy = data.aws_iam_policy_document.file_cache_ops.json
+}
+
+module "aws_file_cache_irsa" {
+  source    = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  role_name = "AmazonEKSFileCacheCSIDriverFullAccess"
+
+  role_policy_arns = {
+    fsxfullaccesspolicy     = "arn:aws:iam::aws:policy/AmazonFSxFullAccess",
+    filecaches3accesspolicy = aws_iam_policy.file_cache_s3_access.arn
+    filecacheopspolicy      = aws_iam_policy.file_cache_ops.arn
+  }
+
+  oidc_providers = {
+    main = {
+      provider_arn = module.eks.oidc_provider_arn
+      # See helm values for default service account name
+      namespace_service_accounts = ["kube-system:file-cache-csi-controller-sa"]
+    }
+  }
+}
+
+resource "helm_release" "aws_file_cache_csi_driver" {
+  name             = "aws-file-cache-csi-driver"
+  repository       = "https://kubernetes-sigs.github.io/aws-file-cache-csi-driver/"
+  chart            = "aws-file-cache-csi-driver"
+  namespace        = "kube-system"
+  create_namespace = false
+  wait             = true
+  values = [
+    <<-EOT
+    controller:
+      serviceAccount:
+        create: true
+        name: file-cache-csi-controller-sa
+        annotations:
+          eks.amazonaws.com/role-arn: ${module.aws_file_cache_irsa.iam_role_arn}
+    node:
+      serviceAccount:
+        create: true
+        name: file-cache-csi-node-sa
+        annotations:
+          eks.amazonaws.com/role-arn: ${module.aws_file_cache_irsa.iam_role_arn}
+    EOT
+  ]
+}
+
+resource "aws_security_group" "file_cache" {
+  name_prefix = "${var.name}-efs-sg"
+  vpc_id      = module.vpc.vpc_id
+  description = "Security group allowing ingress/egress rules required for EFS"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "file_cache1" {
+  security_group_id = aws_security_group.file_cache.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 988
+  ip_protocol       = "tcp"
+  to_port           = 988
+}
+
+resource "aws_vpc_security_group_ingress_rule" "file_cache2" {
+  security_group_id = aws_security_group.file_cache.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 1018
+  ip_protocol       = "tcp"
+  to_port           = 1023
+}
+
+
+resource "kubectl_manifest" "efs-storage-class" {
+  yaml_body = <<YAML
+    kind: StorageClass
+    apiVersion: storage.k8s.io/v1
+    metadata:
+      name: fc-sc
+      annotations:
+        storageclass.kubernetes.io/is-default-class: "true"
+    provisioner: filecache.csi.aws.com
+    volumeBindingMode: WaitForFirstConsumer
+    allowVolumeExpansion: true
+    reclaimPolicy: Delete
+    parameters:
+      subnetId: ${element(module.vpc.private_subnets, 0)}
+      securityGroupIds: ${aws_security_group.file_cache.id}
+      dataRepositoryAssociations: "FileCachePath=/abcd-working,DataRepositoryPath=s3://abcd-working"
+      fileCacheType: "LUSTRE"
+      fileCacheTypeVersion: "2.12"
+      weeklyMaintenanceStartTime: "7:00:00"
+      LustreConfiguration: "DeploymentType=CACHE_1,PerUnitStorageThroughput=1000,MetadataConfiguration={StorageCapacity=2400}"
+      copyTagsToDataRepositoryAssociations: "false"
+  YAML
+}

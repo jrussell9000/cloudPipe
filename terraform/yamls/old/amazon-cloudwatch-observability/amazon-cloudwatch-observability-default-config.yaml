@@ -1,0 +1,2824 @@
+D! [EC2] Found active network interface
+I! imds retry client will retry 1 timesI! Detected the instance is EC2
+2025/06/18 13:35:18 Reading json config file path: /opt/aws/amazon-cloudwatch-agent/bin/default_linux_config.json ...
+/opt/aws/amazon-cloudwatch-agent/bin/default_linux_config.json does not exist or cannot read. Skipping it.
+2025/06/18 13:35:18 Reading json config file path: /etc/cwagentconfig/..2025_06_18_13_35_18.3390972508/cwagentconfig.json ...
+2025/06/18 13:35:18 Find symbolic link /etc/cwagentconfig/..data 
+2025/06/18 13:35:18 Find symbolic link /etc/cwagentconfig/cwagentconfig.json 
+2025/06/18 13:35:18 Reading json config file path: /etc/cwagentconfig/cwagentconfig.json ...
+2025/06/18 13:35:18 I! Valid Json input schema.
+2025/06/18 13:35:18 I! attempt to access ECS task metadata to determine whether I'm running in ECS.
+2025/06/18 13:35:19 W! retry [0/3], unable to get http response from http://169.254.170.2/v2/metadata, error: unable to get response from http://169.254.170.2/v2/metadata, error: Get "http://169.254.170.2/v2/metadata": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+2025/06/18 13:35:20 W! retry [1/3], unable to get http response from http://169.254.170.2/v2/metadata, error: unable to get response from http://169.254.170.2/v2/metadata, error: Get "http://169.254.170.2/v2/metadata": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+2025/06/18 13:35:21 W! retry [2/3], unable to get http response from http://169.254.170.2/v2/metadata, error: unable to get response from http://169.254.170.2/v2/metadata, error: Get "http://169.254.170.2/v2/metadata": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+2025/06/18 13:35:21 I! access ECS task metadata fail with response unable to get response from http://169.254.170.2/v2/metadata, error: Get "http://169.254.170.2/v2/metadata": context deadline exceeded (Client.Timeout exceeded while awaiting headers), assuming I'm not running in ECS.
+2025/06/18 13:35:21 Configuration validation first phase succeeded
+2025/06/18 13:35:21 I! Config has been translated into TOML /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.toml 
+2025/06/18 13:35:21 D! config [agent]
+  collection_jitter = "0s"
+  debug = false
+  flush_interval = "1s"
+  flush_jitter = "0s"
+  hostname = "ip-10-1-8-16.us-east-2.compute.internal"
+  interval = "60s"
+  logfile = ""
+  logtarget = "lumberjack"
+  metric_batch_size = 1000
+  metric_buffer_limit = 10000
+  omit_hostname = true
+  precision = ""
+  quiet = false
+  round_interval = false
+
+[outputs]
+
+  [[outputs.cloudwatchlogs]]
+    force_flush_interval = "5s"
+    log_stream_name = "cloudwatch-agent-6rzk8"
+    mode = "EKS"
+    region = "us-east-2"
+    region_type = "ACJ"
+2025/06/18 13:35:21 I! Config has been translated into YAML /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.yaml 
+2025/06/18 13:35:21 D! config exporters:
+    awsemf/application_signals:
+        add_entity: false
+        certificate_file_path: ""
+        detailed_metrics: false
+        dimension_rollup_option: NoDimensionRollup
+        disable_metric_extraction: false
+        eks_fargate_container_insights_enabled: false
+        endpoint: ""
+        enhanced_container_insights: false
+        imds_retries: 1
+        local_mode: false
+        log_group_name: /aws/application-signals/data
+        log_retention: 0
+        log_stream_name: ""
+        max_retries: 2
+        metric_declarations:
+            - dimensions:
+                - - Environment
+                  - Operation
+                  - Service
+                - - Environment
+                  - Service
+              label_matchers:
+                - label_names:
+                    - Telemetry.Source
+                  regex: ^(ServerSpan|LocalRootSpan)$
+                  separator: ;
+              metric_name_selectors:
+                - Latency
+                - Fault
+                - Error
+            - dimensions:
+                - - Environment
+                  - Operation
+                  - RemoteEnvironment
+                  - RemoteOperation
+                  - RemoteResourceIdentifier
+                  - RemoteResourceType
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - Operation
+                  - RemoteEnvironment
+                  - RemoteOperation
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - Operation
+                  - RemoteOperation
+                  - RemoteResourceIdentifier
+                  - RemoteResourceType
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - Operation
+                  - RemoteOperation
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - RemoteEnvironment
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - RemoteEnvironment
+                  - RemoteOperation
+                  - RemoteResourceIdentifier
+                  - RemoteResourceType
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - RemoteEnvironment
+                  - RemoteOperation
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - RemoteOperation
+                  - RemoteResourceIdentifier
+                  - RemoteResourceType
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - RemoteOperation
+                  - RemoteService
+                  - Service
+                - - Environment
+                  - RemoteResourceIdentifier
+                  - RemoteResourceType
+                  - RemoteService
+                  - Service
+                - - RemoteResourceIdentifier
+                  - RemoteResourceType
+                  - RemoteService
+                - - RemoteService
+              label_matchers:
+                - label_names:
+                    - Telemetry.Source
+                  regex: ^(ClientSpan|ProducerSpan|ConsumerSpan)$
+                  separator: ;
+              metric_name_selectors:
+                - Latency
+                - Fault
+                - Error
+            - dimensions:
+                - - Environment
+                  - Service
+              label_matchers:
+                - label_names:
+                    - Telemetry.Source
+                  regex: ^RuntimeMetric$
+                  separator: ;
+              metric_name_selectors:
+                - ^.*$
+        middleware: agenthealth/logs
+        namespace: ApplicationSignals
+        no_verify_ssl: false
+        num_workers: 8
+        output_destination: cloudwatch
+        profile: ""
+        proxy_address: ""
+        region: us-east-2
+        request_timeout_seconds: 30
+        resource_arn: ""
+        resource_to_telemetry_conversion:
+            enabled: false
+        retain_initial_value_of_delta_metric: false
+        role_arn: ""
+        version: "1"
+    awsemf/containerinsights:
+        add_entity: true
+        certificate_file_path: ""
+        detailed_metrics: false
+        dimension_rollup_option: NoDimensionRollup
+        disable_metric_extraction: false
+        eks_fargate_container_insights_enabled: false
+        endpoint: ""
+        enhanced_container_insights: true
+        imds_retries: 1
+        local_mode: false
+        log_group_name: /aws/containerinsights/{ClusterName}/performance
+        log_retention: 0
+        log_stream_name: '{NodeName}'
+        max_retries: 2
+        metric_declarations:
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - Namespace
+                  - PodName
+              metric_name_selectors:
+                - container_cpu_utilization
+                - container_cpu_utilization_over_container_limit
+                - container_cpu_limit
+                - container_cpu_request
+                - container_memory_utilization
+                - container_memory_utilization_over_container_limit
+                - container_memory_failures_total
+                - container_memory_limit
+                - container_memory_request
+                - container_filesystem_usage
+                - container_filesystem_available
+                - container_filesystem_utilization
+            - dimensions:
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                - - ClusterName
+                  - Namespace
+                  - Service
+                - - ClusterName
+                  - Namespace
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+              metric_name_selectors:
+                - pod_cpu_utilization
+                - pod_memory_utilization
+                - pod_network_rx_bytes
+                - pod_network_tx_bytes
+                - pod_cpu_utilization_over_pod_limit
+                - pod_memory_utilization_over_pod_limit
+            - dimensions:
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - Namespace
+                - - ClusterName
+              metric_name_selectors:
+                - pod_interface_network_rx_dropped
+                - pod_interface_network_tx_dropped
+            - dimensions:
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - Namespace
+                  - Service
+              metric_name_selectors:
+                - pod_cpu_reserved_capacity
+                - pod_memory_reserved_capacity
+                - pod_number_of_container_restarts
+                - pod_number_of_containers
+                - pod_number_of_running_containers
+                - pod_status_ready
+                - pod_status_scheduled
+                - pod_status_running
+                - pod_status_pending
+                - pod_status_failed
+                - pod_status_unknown
+                - pod_status_succeeded
+                - pod_memory_request
+                - pod_memory_limit
+                - pod_cpu_limit
+                - pod_cpu_request
+                - pod_cpu_usage_total
+                - pod_memory_working_set
+                - pod_container_status_running
+                - pod_container_status_terminated
+                - pod_container_status_waiting
+                - pod_container_status_waiting_reason_crash_loop_back_off
+                - pod_container_status_waiting_reason_image_pull_error
+                - pod_container_status_waiting_reason_start_error
+                - pod_container_status_waiting_reason_create_container_error
+                - pod_container_status_waiting_reason_create_container_config_error
+                - pod_container_status_terminated_reason_oom_killed
+                - pod_gpu_request
+                - pod_gpu_limit
+                - pod_gpu_usage_total
+                - pod_gpu_reserved_capacity
+            - dimensions:
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                - - ClusterName
+              metric_name_selectors:
+                - node_cpu_utilization
+                - node_memory_utilization
+                - node_network_total_bytes
+                - node_cpu_reserved_capacity
+                - node_memory_reserved_capacity
+                - node_number_of_running_pods
+                - node_number_of_running_containers
+                - node_cpu_usage_total
+                - node_cpu_limit
+                - node_memory_working_set
+                - node_memory_limit
+                - node_status_condition_ready
+                - node_status_condition_disk_pressure
+                - node_status_condition_memory_pressure
+                - node_status_condition_pid_pressure
+                - node_status_condition_network_unavailable
+                - node_status_condition_unknown
+                - node_status_capacity_pods
+                - node_status_allocatable_pods
+                - node_gpu_limit
+                - node_gpu_usage_total
+                - node_gpu_reserved_capacity
+            - dimensions:
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                - - ClusterName
+              metric_name_selectors:
+                - node_interface_network_rx_dropped
+                - node_interface_network_tx_dropped
+                - node_diskio_io_service_bytes_total
+                - node_diskio_io_serviced_total
+                - hyperpod_node_health_status_schedulable
+                - hyperpod_node_health_status_unschedulable_pending_replacement
+                - hyperpod_node_health_status_unschedulable_pending_reboot
+                - hyperpod_node_health_status_unschedulable
+            - dimensions:
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                - - ClusterName
+              metric_name_selectors:
+                - node_filesystem_utilization
+                - node_filesystem_inodes
+                - node_filesystem_inodes_free
+            - dimensions:
+                - - ClusterName
+                  - Namespace
+                  - Service
+                - - ClusterName
+              metric_name_selectors:
+                - service_number_of_running_pods
+            - dimensions:
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+              metric_name_selectors:
+                - replicas_desired
+                - replicas_ready
+                - status_replicas_available
+                - status_replicas_unavailable
+            - dimensions:
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+              metric_name_selectors:
+                - daemonset_status_number_available
+                - daemonset_status_number_unavailable
+            - dimensions:
+                - - ClusterName
+                  - Namespace
+                - - ClusterName
+              metric_name_selectors:
+                - namespace_number_of_running_pods
+            - dimensions:
+                - - ClusterName
+              metric_name_selectors:
+                - cluster_node_count
+                - cluster_failed_node_count
+                - cluster_number_of_running_pods
+            - dimensions:
+                - - ClusterName
+                  - endpoint
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_storage_size_bytes
+                - apiserver_storage_db_total_size_in_bytes
+                - etcd_db_total_size_in_bytes
+            - dimensions:
+                - - ClusterName
+                  - resource
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_storage_list_duration_seconds
+                - apiserver_longrunning_requests
+                - apiserver_storage_objects
+            - dimensions:
+                - - ClusterName
+                  - verb
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_request_duration_seconds
+                - rest_client_request_duration_seconds
+            - dimensions:
+                - - ClusterName
+                  - code
+                  - verb
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_request_total
+                - apiserver_request_total_5xx
+            - dimensions:
+                - - ClusterName
+                  - operation
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_admission_controller_admission_duration_seconds
+                - apiserver_admission_step_admission_duration_seconds
+                - etcd_request_duration_seconds
+            - dimensions:
+                - - ClusterName
+                  - code
+                  - method
+                - - ClusterName
+              metric_name_selectors:
+                - rest_client_requests_total
+            - dimensions:
+                - - ClusterName
+                  - request_kind
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_current_inflight_requests
+                - apiserver_current_inqueue_requests
+            - dimensions:
+                - - ClusterName
+                  - name
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_admission_webhook_admission_duration_seconds
+            - dimensions:
+                - - ClusterName
+                  - group
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_requested_deprecated_apis
+            - dimensions:
+                - - ClusterName
+                  - reason
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_flowcontrol_rejected_requests_total
+            - dimensions:
+                - - ClusterName
+                  - priority_level
+                - - ClusterName
+              metric_name_selectors:
+                - apiserver_flowcontrol_request_concurrency_limit
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - ContainerName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - GpuDevice
+                  - Namespace
+                  - PodName
+              metric_name_selectors:
+                - container_gpu_utilization
+                - container_gpu_memory_utilization
+                - container_gpu_memory_total
+                - container_gpu_memory_used
+                - container_gpu_power_draw
+                - container_gpu_temperature
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - Namespace
+                - - ClusterName
+                  - Namespace
+                  - Service
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - FullPodName
+                  - GpuDevice
+                  - Namespace
+                  - PodName
+              metric_name_selectors:
+                - pod_gpu_utilization
+                - pod_gpu_memory_utilization
+                - pod_gpu_memory_total
+                - pod_gpu_memory_used
+                - pod_gpu_power_draw
+                - pod_gpu_temperature
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                - - ClusterName
+                  - GpuDevice
+                  - InstanceId
+                  - InstanceType
+                  - NodeName
+              metric_name_selectors:
+                - node_gpu_utilization
+                - node_gpu_memory_utilization
+                - node_gpu_memory_total
+                - node_gpu_memory_used
+                - node_gpu_power_draw
+                - node_gpu_temperature
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - ContainerName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - Namespace
+                  - NeuronCore
+                  - NeuronDevice
+                  - PodName
+              metric_name_selectors:
+                - container_neuroncore_utilization
+                - container_neuroncore_memory_usage_total
+                - container_neuroncore_memory_usage_constants
+                - container_neuroncore_memory_usage_model_code
+                - container_neuroncore_memory_usage_model_shared_scratchpad
+                - container_neuroncore_memory_usage_runtime_memory
+                - container_neuroncore_memory_usage_tensors
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - ContainerName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - Namespace
+                  - NeuronDevice
+                  - PodName
+              metric_name_selectors:
+                - container_neurondevice_hw_ecc_events_total
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - Namespace
+                - - ClusterName
+                  - Namespace
+                  - Service
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - NeuronCore
+                  - NeuronDevice
+                  - PodName
+              metric_name_selectors:
+                - pod_neuroncore_utilization
+                - pod_neuroncore_memory_usage_total
+                - pod_neuroncore_memory_usage_constants
+                - pod_neuroncore_memory_usage_model_code
+                - pod_neuroncore_memory_usage_model_shared_scratchpad
+                - pod_neuroncore_memory_usage_runtime_memory
+                - pod_neuroncore_memory_usage_tensors
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - Namespace
+                - - ClusterName
+                  - Namespace
+                  - Service
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - NeuronDevice
+                  - PodName
+              metric_name_selectors:
+                - pod_neurondevice_hw_ecc_events_total
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                - - ClusterName
+                  - InstanceId
+                  - InstanceType
+                  - NeuronCore
+                  - NeuronDevice
+                  - NodeName
+              metric_name_selectors:
+                - node_neuroncore_utilization
+                - node_neuroncore_memory_usage_total
+                - node_neuroncore_memory_usage_constants
+                - node_neuroncore_memory_usage_model_code
+                - node_neuroncore_memory_usage_model_shared_scratchpad
+                - node_neuroncore_memory_usage_runtime_memory
+                - node_neuroncore_memory_usage_tensors
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+              metric_name_selectors:
+                - node_neuron_execution_errors_total
+                - node_neurondevice_runtime_memory_used_bytes
+                - node_neuron_execution_latency
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                - - ClusterName
+                  - InstanceId
+                  - NeuronDevice
+                  - NodeName
+              metric_name_selectors:
+                - node_neurondevice_hw_ecc_events_total
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - ContainerName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - ContainerName
+                  - FullPodName
+                  - Namespace
+                  - NetworkInterfaceId
+                  - PodName
+              metric_name_selectors:
+                - container_efa_rx_bytes
+                - container_efa_tx_bytes
+                - container_efa_rx_dropped
+                - container_efa_rdma_read_bytes
+                - container_efa_rdma_write_bytes
+                - container_efa_rdma_write_recv_bytes
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - Namespace
+                - - ClusterName
+                  - Namespace
+                  - Service
+                - - ClusterName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - PodName
+                - - ClusterName
+                  - FullPodName
+                  - Namespace
+                  - NetworkInterfaceId
+                  - PodName
+              metric_name_selectors:
+                - pod_efa_rx_bytes
+                - pod_efa_tx_bytes
+                - pod_efa_rx_dropped
+                - pod_efa_rdma_read_bytes
+                - pod_efa_rdma_write_bytes
+                - pod_efa_rdma_write_recv_bytes
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                - - ClusterName
+                  - InstanceId
+                  - InstanceType
+                  - NetworkInterfaceId
+                  - NodeName
+              metric_name_selectors:
+                - node_efa_rx_bytes
+                - node_efa_tx_bytes
+                - node_efa_rx_dropped
+                - node_efa_rdma_read_bytes
+                - node_efa_rdma_write_bytes
+                - node_efa_rdma_write_recv_bytes
+            - dimensions:
+                - - ClusterName
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                - - ClusterName
+                  - InstanceId
+                  - NodeName
+                  - VolumeId
+              metric_name_selectors:
+                - node_diskio_ebs_total_read_ops
+                - node_diskio_ebs_total_write_ops
+                - node_diskio_ebs_total_read_bytes
+                - node_diskio_ebs_total_write_bytes
+                - node_diskio_ebs_total_read_time
+                - node_diskio_ebs_total_write_time
+                - node_diskio_ebs_volume_performance_exceeded_iops
+                - node_diskio_ebs_volume_performance_exceeded_tp
+                - node_diskio_ebs_ec2_instance_performance_exceeded_iops
+                - node_diskio_ebs_ec2_instance_performance_exceeded_tp
+                - node_diskio_ebs_volume_queue_length
+        metric_descriptors:
+            - metric_name: apiserver_admission_controller_admission_duration_seconds
+              overwrite: true
+              unit: Seconds
+            - metric_name: apiserver_admission_step_admission_duration_seconds
+              overwrite: true
+              unit: Seconds
+            - metric_name: apiserver_admission_webhook_admission_duration_seconds
+              overwrite: true
+              unit: Seconds
+            - metric_name: apiserver_current_inflight_requests
+              overwrite: true
+              unit: Count
+            - metric_name: apiserver_current_inqueue_requests
+              overwrite: true
+              unit: Count
+            - metric_name: apiserver_flowcontrol_rejected_requests_total
+              overwrite: true
+              unit: Count
+            - metric_name: apiserver_flowcontrol_request_concurrency_limit
+              overwrite: true
+              unit: Count
+            - metric_name: apiserver_longrunning_requests
+              overwrite: true
+              unit: Count
+            - metric_name: apiserver_request_duration_seconds
+              overwrite: true
+              unit: Seconds
+            - metric_name: apiserver_request_total
+              overwrite: true
+              unit: Count
+            - metric_name: apiserver_request_total_5xx
+              overwrite: true
+              unit: Count
+            - metric_name: apiserver_requested_deprecated_apis
+              overwrite: true
+              unit: Count
+            - metric_name: apiserver_storage_objects
+              overwrite: true
+              unit: Count
+            - metric_name: etcd_request_duration_seconds
+              overwrite: true
+              unit: Seconds
+            - metric_name: apiserver_storage_list_duration_seconds
+              overwrite: true
+              unit: Seconds
+            - metric_name: apiserver_storage_db_total_size_in_bytes
+              overwrite: true
+              unit: Bytes
+            - metric_name: apiserver_storage_size_bytes
+              overwrite: true
+              unit: Bytes
+            - metric_name: etcd_db_total_size_in_bytes
+              overwrite: true
+              unit: Bytes
+            - metric_name: rest_client_request_duration_seconds
+              overwrite: true
+              unit: Seconds
+            - metric_name: rest_client_requests_total
+              overwrite: true
+              unit: Count
+        middleware: agenthealth/logs
+        namespace: ContainerInsights
+        no_verify_ssl: false
+        num_workers: 8
+        output_destination: cloudwatch
+        parse_json_encoded_attr_values:
+            - Sources
+            - kubernetes
+        profile: ""
+        proxy_address: ""
+        region: us-east-2
+        request_timeout_seconds: 30
+        resource_arn: ""
+        resource_to_telemetry_conversion:
+            enabled: true
+        retain_initial_value_of_delta_metric: false
+        role_arn: ""
+        version: "0"
+    awsxray/application_signals:
+        certificate_file_path: ""
+        endpoint: ""
+        imds_retries: 1
+        index_all_attributes: false
+        indexed_attributes:
+            - aws.local.service
+            - aws.local.operation
+            - aws.local.environment
+            - aws.remote.service
+            - aws.remote.operation
+            - aws.remote.environment
+            - aws.remote.resource.identifier
+            - aws.remote.resource.type
+        local_mode: false
+        max_retries: 2
+        middleware: agenthealth/traces
+        no_verify_ssl: false
+        num_workers: 8
+        profile: ""
+        proxy_address: ""
+        region: us-east-2
+        request_timeout_seconds: 30
+        resource_arn: ""
+        role_arn: ""
+        telemetry:
+            enabled: true
+            include_metadata: true
+extensions:
+    agenthealth/logs:
+        is_usage_data_enabled: true
+        stats:
+            operations:
+                - PutLogEvents
+            usage_flags:
+                mode: EKS
+                region_type: ACJ
+    agenthealth/statuscode:
+        is_status_code_enabled: true
+        is_usage_data_enabled: true
+        stats:
+            usage_flags:
+                mode: EKS
+                region_type: ACJ
+    agenthealth/traces:
+        is_usage_data_enabled: true
+        stats:
+            operations:
+                - PutTraceSegments
+            usage_flags:
+                mode: EKS
+                region_type: ACJ
+    awsproxy/application_signals:
+        aws_endpoint: ""
+        certificate_file_path: ""
+        dialer:
+            timeout: 0s
+        endpoint: 0.0.0.0:2000
+        imds_retries: 1
+        local_mode: false
+        profile: ""
+        proxy_address: ""
+        region: us-east-2
+        role_arn: ""
+        service_name: ""
+    entitystore:
+        kubernetes_mode: EKS
+        mode: ec2
+        region: us-east-2
+    k8smetadata:
+        objects:
+            - endpointslices
+            - services
+    server:
+        listen_addr: :4311
+        tls_ca_path: /etc/amazon-cloudwatch-observability-agent-client-cert/tls-ca.crt
+        tls_cert_path: /etc/amazon-cloudwatch-observability-agent-server-cert/server.crt
+        tls_key_path: /etc/amazon-cloudwatch-observability-agent-server-cert/server.key
+processors:
+    awsapplicationsignals:
+        resolvers:
+            - name: cloudpipe
+              platform: eks
+    awsentity/resource/containerinsights:
+        cluster_name: cloudpipe
+        entity_type: Resource
+        kubernetes_mode: EKS
+        platform: ec2
+    awsentity/service/application_signals:
+        cluster_name: cloudpipe
+        entity_type: Service
+        kubernetes_mode: EKS
+        platform: ec2
+    batch/containerinsights:
+        metadata_cardinality_limit: 1000
+        send_batch_max_size: 0
+        send_batch_size: 8192
+        timeout: 5s
+    filter/containerinsights:
+        error_mode: propagate
+        logs: {}
+        metrics:
+            exclude:
+                match_type: strict
+                metric_names:
+                    - up
+                    - scrape_duration_seconds
+                    - scrape_samples_scraped
+                    - scrape_series_added
+                    - scrape_samples_post_metric_relabeling
+        spans: {}
+        traces: {}
+    gpuattributes/containerinsights: {}
+    metricstransform/application_signals:
+        transforms:
+            - action: update
+              aggregation_type: ""
+              include: jvm.cpu.recent_utilization
+              match_type: ""
+              new_name: JVMCpuRecentUtilization
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: jvm.cpu.time
+              match_type: ""
+              new_name: JVMCpuTime
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: jvm.classes.loaded
+              match_type: ""
+              new_name: JVMClassLoaded
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: jvm.threads.count
+              match_type: ""
+              new_name: JVMThreadCount
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: jvm.memory.nonheap.used
+              match_type: ""
+              new_name: JVMMemoryNonHeapUsed
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: jvm.memory.pool.used_after_last_gc
+              match_type: ""
+              new_name: JVMMemoryUsedAfterLastGC
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: jvm.memory.heap.used
+              match_type: ""
+              new_name: JVMMemoryHeapUsed
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                name: .*Old\sGen$
+              include: jvm.memory.pool.used
+              match_type: regexp
+              new_name: JVMMemoryOldGenUsed
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                name: .*Survivor\sSpace$
+              include: jvm.memory.pool.used
+              match_type: regexp
+              new_name: JVMMemorySurvivorSpaceUsed
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                name: .*Eden\sSpace$
+              include: jvm.memory.pool.used
+              match_type: regexp
+              new_name: JVMMemoryEdenSpaceUsed
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: jvm.gc.collections.elapsed
+              match_type: ""
+              new_name: JVMGCDuration
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: jvm.gc.collections.count
+              match_type: ""
+              new_name: JVMGCCount
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                name: G1 Old Generation
+              include: jvm.gc.collections.elapsed
+              match_type: strict
+              new_name: JVMGCOldGenDuration
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                name: G1 Young Generation
+              include: jvm.gc.collections.elapsed
+              match_type: strict
+              new_name: JVMGCYoungGenDuration
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                name: G1 Old Generation
+              include: jvm.gc.collections.count
+              match_type: strict
+              new_name: JVMGCOldGenCount
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                name: G1 Young Generation
+              include: jvm.gc.collections.count
+              match_type: strict
+              new_name: JVMGCYoungGenCount
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: ^process\.runtime\.(.*)\.gc_count$$
+              match_type: regexp
+              new_name: PythonProcessGCCount
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                count: "0"
+              include: ^process\.runtime\.(.*)\.gc_count$$
+              match_type: regexp
+              new_name: PythonProcessGCGen0Count
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                count: "1"
+              include: ^process\.runtime\.(.*)\.gc_count$$
+              match_type: regexp
+              new_name: PythonProcessGCGen1Count
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                count: "2"
+              include: ^process\.runtime\.(.*)\.gc_count$$
+              match_type: regexp
+              new_name: PythonProcessGCGen2Count
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: ^process\.runtime\.(.*)\.thread_count$$
+              match_type: regexp
+              new_name: PythonProcessThreadCount
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: ^process\.runtime\.(.*)\.cpu_time$$
+              match_type: regexp
+              new_name: PythonProcessCpuTime
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: ^process\.runtime\.(.*)\.cpu\.utilization$$
+              match_type: regexp
+              new_name: PythonProcessCpuUtilization
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                type: vms
+              include: ^process\.runtime\.(.*)\.memory$$
+              match_type: regexp
+              new_name: PythonProcessVMSMemoryUsed
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                type: rss
+              include: ^process\.runtime\.(.*)\.memory$$
+              match_type: regexp
+              new_name: PythonProcessRSSMemoryUsed
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                generation: gen0
+              include: process.runtime.dotnet.gc.collections.count
+              match_type: ""
+              new_name: DotNetGCGen0Count
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                generation: gen1
+              include: process.runtime.dotnet.gc.collections.count
+              match_type: ""
+              new_name: DotNetGCGen1Count
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                generation: gen2
+              include: process.runtime.dotnet.gc.collections.count
+              match_type: ""
+              new_name: DotNetGCGen2Count
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: process.runtime.dotnet.gc.duration
+              match_type: ""
+              new_name: DotNetGCDuration
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                generation: gen0
+              include: process.runtime.dotnet.gc.heap.size
+              match_type: ""
+              new_name: DotNetGCGen0HeapSize
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                generation: gen1
+              include: process.runtime.dotnet.gc.heap.size
+              match_type: ""
+              new_name: DotNetGCGen1HeapSize
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                generation: gen2
+              include: process.runtime.dotnet.gc.heap.size
+              match_type: ""
+              new_name: DotNetGCGen2HeapSize
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                generation: loh
+              include: process.runtime.dotnet.gc.heap.size
+              match_type: ""
+              new_name: DotNetGCLOHHeapSize
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                generation: poh
+              include: process.runtime.dotnet.gc.heap.size
+              match_type: ""
+              new_name: DotNetGCPOHHeapSize
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: process.runtime.dotnet.thread_pool.threads.count
+              match_type: ""
+              new_name: DotNetThreadCount
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: process.runtime.dotnet.thread_pool.queue.length
+              match_type: ""
+              new_name: DotNetThreadQueueLength
+              operations:
+                - action: aggregate_labels
+                  aggregation_type: sum
+                  experimental_scale: 0
+                  label: ""
+                  label_set: []
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Telemetry.Source
+                  new_value: RuntimeMetric
+              submatch_case: ""
+    metricstransform/containerinsights:
+        transforms:
+            - action: insert
+              aggregation_type: ""
+              experimental_match_labels:
+                code: ^5.*
+              include: apiserver_request_total
+              match_type: regexp
+              new_name: apiserver_request_total_5xx
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_ec2_exceeded_iops_seconds_total
+              match_type: ""
+              new_name: node_diskio_ebs_ec2_instance_performance_exceeded_iops
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_write_ops_total
+              match_type: ""
+              new_name: node_diskio_ebs_total_write_ops
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_read_bytes_total
+              match_type: ""
+              new_name: node_diskio_ebs_total_read_bytes
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_write_bytes_total
+              match_type: ""
+              new_name: node_diskio_ebs_total_write_bytes
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_read_seconds_total
+              match_type: ""
+              new_name: node_diskio_ebs_total_read_time
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_ec2_exceeded_tp_seconds_total
+              match_type: ""
+              new_name: node_diskio_ebs_ec2_instance_performance_exceeded_tp
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_volume_queue_length
+              match_type: ""
+              new_name: node_diskio_ebs_volume_queue_length
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_read_ops_total
+              match_type: ""
+              new_name: node_diskio_ebs_total_read_ops
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_write_seconds_total
+              match_type: ""
+              new_name: node_diskio_ebs_total_write_time
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_exceeded_iops_seconds_total
+              match_type: ""
+              new_name: node_diskio_ebs_volume_performance_exceeded_iops
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: aws_ebs_csi_exceeded_tp_seconds_total
+              match_type: ""
+              new_name: node_diskio_ebs_volume_performance_exceeded_tp
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeEBS
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_GPU_UTIL
+              match_type: ""
+              new_name: container_gpu_utilization
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: ContainerGPU
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_GPU_UTIL
+              match_type: ""
+              new_name: pod_gpu_utilization
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: PodGPU
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_GPU_UTIL
+              match_type: ""
+              new_name: node_gpu_utilization
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeGPU
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_USED_PERCENT
+              match_type: ""
+              new_name: container_gpu_memory_utilization
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: ContainerGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 100
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_USED_PERCENT
+              match_type: ""
+              new_name: pod_gpu_memory_utilization
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: PodGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 100
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_USED_PERCENT
+              match_type: ""
+              new_name: node_gpu_memory_utilization
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 100
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_USED
+              match_type: ""
+              new_name: container_gpu_memory_used
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: ContainerGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 1.048576e+06
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_USED
+              match_type: ""
+              new_name: pod_gpu_memory_used
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: PodGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 1.048576e+06
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_USED
+              match_type: ""
+              new_name: node_gpu_memory_used
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 1.048576e+06
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_TOTAL
+              match_type: ""
+              new_name: container_gpu_memory_total
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: ContainerGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 1.048576e+06
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_TOTAL
+              match_type: ""
+              new_name: pod_gpu_memory_total
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: PodGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 1.048576e+06
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_FB_TOTAL
+              match_type: ""
+              new_name: node_gpu_memory_total
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeGPU
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 1.048576e+06
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_GPU_TEMP
+              match_type: ""
+              new_name: container_gpu_temperature
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: ContainerGPU
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_GPU_TEMP
+              match_type: ""
+              new_name: pod_gpu_temperature
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: PodGPU
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_GPU_TEMP
+              match_type: ""
+              new_name: node_gpu_temperature
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeGPU
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_POWER_USAGE
+              match_type: ""
+              new_name: container_gpu_power_draw
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: ContainerGPU
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_POWER_USAGE
+              match_type: ""
+              new_name: pod_gpu_power_draw
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: PodGPU
+              submatch_case: ""
+            - action: insert
+              aggregation_type: ""
+              include: DCGM_FI_DEV_POWER_USAGE
+              match_type: ""
+              new_name: node_gpu_power_draw
+              operations:
+                - action: add_label
+                  aggregation_type: ""
+                  experimental_scale: 0
+                  label: ""
+                  label_value: ""
+                  new_label: Type
+                  new_value: NodeGPU
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: neuron_runtime_memory_used_bytes
+              match_type: ""
+              new_name: neurondevice_runtime_memory_used_bytes
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: neuroncore_memory_usage_constants
+              match_type: ""
+              new_name: neuroncore_memory_usage_constants
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: neuroncore_memory_usage_model_shared_scratchpad
+              match_type: ""
+              new_name: neuroncore_memory_usage_model_shared_scratchpad
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: neuroncore_memory_usage_tensors
+              match_type: ""
+              new_name: neuroncore_memory_usage_tensors
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: neuroncore_utilization_ratio
+              match_type: ""
+              new_name: neuroncore_utilization
+              operations:
+                - action: experimental_scale_value
+                  aggregation_type: ""
+                  experimental_scale: 100
+                  label: ""
+                  label_value: ""
+                  new_label: ""
+                  new_value: ""
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: execution_latency_seconds
+              match_type: ""
+              new_name: neuron_execution_latency
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: neuroncore_memory_usage_model_code
+              match_type: ""
+              new_name: neuroncore_memory_usage_model_code
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: neuroncore_memory_usage_runtime_memory
+              match_type: ""
+              new_name: neuroncore_memory_usage_runtime_memory
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: instance_info
+              match_type: ""
+              new_name: instance_info
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: neuron_hardware
+              match_type: ""
+              new_name: neuron_hardware
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: hardware_ecc_events_total
+              match_type: ""
+              new_name: neurondevice_hw_ecc_events
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: execution_errors_total
+              match_type: ""
+              new_name: neuron_execution_errors
+              operations: []
+              submatch_case: ""
+            - action: update
+              aggregation_type: ""
+              include: execution_status_total
+              match_type: ""
+              new_name: neuron_execution_status
+              operations: []
+              submatch_case: ""
+    resourcedetection:
+        aks:
+            resource_attributes:
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                k8s.cluster.name:
+                    enabled: false
+        azure:
+            resource_attributes:
+                azure.resourcegroup.name:
+                    enabled: true
+                azure.vm.name:
+                    enabled: true
+                azure.vm.scaleset.name:
+                    enabled: true
+                azure.vm.size:
+                    enabled: true
+                cloud.account.id:
+                    enabled: true
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                cloud.region:
+                    enabled: true
+                host.id:
+                    enabled: true
+                host.name:
+                    enabled: true
+            tags: []
+        compression: ""
+        consul:
+            address: ""
+            datacenter: ""
+            namespace: ""
+            resource_attributes:
+                cloud.region:
+                    enabled: true
+                host.id:
+                    enabled: true
+                host.name:
+                    enabled: true
+            token_file: ""
+        detectors:
+            - eks
+            - env
+            - ec2
+        disable_keep_alives: false
+        docker:
+            resource_attributes:
+                host.name:
+                    enabled: true
+                os.type:
+                    enabled: true
+        ec2:
+            resource_attributes:
+                cloud.account.id:
+                    enabled: true
+                cloud.availability_zone:
+                    enabled: true
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                cloud.region:
+                    enabled: true
+                host.id:
+                    enabled: true
+                host.image.id:
+                    enabled: true
+                host.name:
+                    enabled: true
+                host.type:
+                    enabled: true
+            tags:
+                - ^kubernetes.io/cluster/.*$
+                - ^aws:autoscaling:groupName
+        ecs:
+            resource_attributes:
+                aws.ecs.cluster.arn:
+                    enabled: true
+                aws.ecs.launchtype:
+                    enabled: true
+                aws.ecs.task.arn:
+                    enabled: true
+                aws.ecs.task.family:
+                    enabled: true
+                aws.ecs.task.id:
+                    enabled: true
+                aws.ecs.task.revision:
+                    enabled: true
+                aws.log.group.arns:
+                    enabled: true
+                aws.log.group.names:
+                    enabled: true
+                aws.log.stream.arns:
+                    enabled: true
+                aws.log.stream.names:
+                    enabled: true
+                cloud.account.id:
+                    enabled: true
+                cloud.availability_zone:
+                    enabled: true
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                cloud.region:
+                    enabled: true
+        eks:
+            resource_attributes:
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                k8s.cluster.name:
+                    enabled: false
+        elasticbeanstalk:
+            resource_attributes:
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                deployment.environment:
+                    enabled: true
+                service.instance.id:
+                    enabled: true
+                service.version:
+                    enabled: true
+        endpoint: ""
+        gcp:
+            resource_attributes:
+                cloud.account.id:
+                    enabled: true
+                cloud.availability_zone:
+                    enabled: true
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                cloud.region:
+                    enabled: true
+                faas.id:
+                    enabled: true
+                faas.instance:
+                    enabled: true
+                faas.name:
+                    enabled: true
+                faas.version:
+                    enabled: true
+                gcp.cloud_run.job.execution:
+                    enabled: true
+                gcp.cloud_run.job.task_index:
+                    enabled: true
+                gcp.gce.instance.hostname:
+                    enabled: false
+                gcp.gce.instance.name:
+                    enabled: false
+                host.id:
+                    enabled: true
+                host.name:
+                    enabled: true
+                host.type:
+                    enabled: true
+                k8s.cluster.name:
+                    enabled: true
+        heroku:
+            resource_attributes:
+                cloud.provider:
+                    enabled: true
+                heroku.app.id:
+                    enabled: true
+                heroku.dyno.id:
+                    enabled: true
+                heroku.release.commit:
+                    enabled: true
+                heroku.release.creation_timestamp:
+                    enabled: true
+                service.instance.id:
+                    enabled: true
+                service.name:
+                    enabled: true
+                service.version:
+                    enabled: true
+        http2_ping_timeout: 0s
+        http2_read_idle_timeout: 0s
+        idle_conn_timeout: 1m30s
+        k8snode:
+            auth_type: serviceAccount
+            context: ""
+            kube_config_path: ""
+            node_from_env_var: ""
+            resource_attributes:
+                k8s.node.name:
+                    enabled: true
+                k8s.node.uid:
+                    enabled: true
+        lambda:
+            resource_attributes:
+                aws.log.group.names:
+                    enabled: true
+                aws.log.stream.names:
+                    enabled: true
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                cloud.region:
+                    enabled: true
+                faas.instance:
+                    enabled: true
+                faas.max_memory:
+                    enabled: true
+                faas.name:
+                    enabled: true
+                faas.version:
+                    enabled: true
+        max_conns_per_host: 0
+        max_idle_conns: 100
+        max_idle_conns_per_host: 0
+        middleware: agenthealth/statuscode
+        openshift:
+            address: ""
+            resource_attributes:
+                cloud.platform:
+                    enabled: true
+                cloud.provider:
+                    enabled: true
+                cloud.region:
+                    enabled: true
+                k8s.cluster.name:
+                    enabled: true
+            tls:
+                ca_file: ""
+                cert_file: ""
+                include_system_ca_certs_pool: false
+                insecure: false
+                insecure_skip_verify: false
+                key_file: ""
+                max_version: ""
+                min_version: ""
+                reload_interval: 0s
+                server_name_override: ""
+            token: ""
+        override: true
+        proxy_url: ""
+        read_buffer_size: 0
+        system:
+            resource_attributes:
+                host.arch:
+                    enabled: false
+                host.cpu.cache.l2.size:
+                    enabled: false
+                host.cpu.family:
+                    enabled: false
+                host.cpu.model.id:
+                    enabled: false
+                host.cpu.model.name:
+                    enabled: false
+                host.cpu.stepping:
+                    enabled: false
+                host.cpu.vendor.id:
+                    enabled: false
+                host.id:
+                    enabled: false
+                host.ip:
+                    enabled: false
+                host.mac:
+                    enabled: false
+                host.name:
+                    enabled: true
+                os.description:
+                    enabled: false
+                os.type:
+                    enabled: true
+        timeout: 2s
+        tls:
+            ca_file: ""
+            cert_file: ""
+            include_system_ca_certs_pool: false
+            insecure: false
+            insecure_skip_verify: false
+            key_file: ""
+            max_version: ""
+            min_version: ""
+            reload_interval: 0s
+            server_name_override: ""
+        write_buffer_size: 0
+receivers:
+    awscontainerinsightreceiver:
+        accelerated_compute_metrics: true
+        add_container_name_metric_label: true
+        add_full_pod_name_metric_label: true
+        add_service_as_attribute: true
+        certificate_file_path: ""
+        cluster_name: cloudpipe
+        collection_interval: 1m0s
+        container_orchestrator: eks
+        enable_control_plane_metrics: true
+        endpoint: ""
+        host_ip: ""
+        host_name: ""
+        imds_retries: 1
+        kube_config_path: ""
+        leader_lock_name: cwagent-clusterleader
+        leader_lock_using_config_map_only: true
+        local_mode: false
+        max_retries: 0
+        middleware: agenthealth/statuscode
+        no_verify_ssl: false
+        num_workers: 0
+        prefer_full_pod_name: true
+        profile: ""
+        proxy_address: ""
+        region: us-east-2
+        request_timeout_seconds: 0
+        resource_arn: ""
+        role_arn: ""
+    otlp/application_signals:
+        protocols:
+            grpc:
+                dialer:
+                    timeout: 0s
+                endpoint: 0.0.0.0:4315
+                include_metadata: false
+                max_concurrent_streams: 0
+                max_recv_msg_size_mib: 0
+                read_buffer_size: 524288
+                transport: tcp
+                write_buffer_size: 0
+            http:
+                endpoint: 0.0.0.0:4316
+                idle_timeout: 0s
+                include_metadata: false
+                logs_url_path: /v1/logs
+                max_request_body_size: 0
+                metrics_url_path: /v1/metrics
+                read_header_timeout: 0s
+                read_timeout: 0s
+                traces_url_path: /v1/traces
+                write_timeout: 0s
+service:
+    extensions:
+        - agenthealth/logs
+        - agenthealth/statuscode
+        - awsproxy/application_signals
+        - agenthealth/traces
+        - k8smetadata
+        - entitystore
+        - server
+    pipelines:
+        metrics/application_signals:
+            exporters:
+                - awsemf/application_signals
+            processors:
+                - metricstransform/application_signals
+                - resourcedetection
+                - awsapplicationsignals
+                - awsentity/service/application_signals
+            receivers:
+                - otlp/application_signals
+        metrics/containerinsights:
+            exporters:
+                - awsemf/containerinsights
+            processors:
+                - batch/containerinsights
+                - filter/containerinsights
+                - awsentity/resource/containerinsights
+                - metricstransform/containerinsights
+                - gpuattributes/containerinsights
+            receivers:
+                - awscontainerinsightreceiver
+        traces/application_signals:
+            exporters:
+                - awsxray/application_signals
+            processors:
+                - resourcedetection
+                - awsapplicationsignals
+            receivers:
+                - otlp/application_signals
+    telemetry:
+        logs:
+            development: false
+            disable_caller: false
+            disable_stacktrace: false
+            encoding: console
+            level: info
+            sampling:
+                enabled: true
+                initial: 2
+                thereafter: 500
+                tick: 10s
+        metrics:
+            address: ""
+            level: None
+        traces:
+            level: None
+2025-06-18T13:35:22Z I! Starting AmazonCloudWatchAgent CWAgent/1.300056.0b1123 (go1.24.2; linux; amd64) with log file  with log target lumberjack
+2025-06-18T13:35:22Z I! AWS SDK log level not set
+2025-06-18T13:35:22Z I! {"caller":"service@v0.115.0/service.go:166","msg":"Setting up own telemetry..."}
+2025-06-18T13:35:22Z I! {"caller":"service@v0.115.0/service.go:215","msg":"Skipped telemetry setup."}
+2025-06-18T13:35:22Z W! {"caller":"awsemfexporter@v0.115.0/emf_exporter.go:82","msg":"the default value for DimensionRollupOption will be changing to NoDimensionRollupin a future release. See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/23997 for moreinformation","kind":"exporter","data_type":"metrics","name":"awsemf/containerinsights"}
+2025-06-18T13:35:22Z W! {"caller":"awsemfexporter@v0.115.0/emf_exporter.go:82","msg":"the default value for DimensionRollupOption will be changing to NoDimensionRollupin a future release. See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/23997 for moreinformation","kind":"exporter","data_type":"metrics","name":"awsemf/application_signals"}
+2025-06-18T13:35:22Z I! {"caller":"filterprocessor@v0.115.0/metrics.go:99","msg":"Metric filter configured","kind":"processor","name":"filter/containerinsights","pipeline":"metrics/containerinsights","include match_type":"","include expressions":[],"include metric names":[],"include metrics with resource attributes":null,"exclude match_type":"strict","exclude expressions":[],"exclude metric names":["up","scrape_duration_seconds","scrape_samples_scraped","scrape_series_added","scrape_samples_post_metric_relabeling"],"exclude metrics with resource attributes":null}
+2025-06-18T13:35:22Z I! {"caller":"service@v0.115.0/service.go:238","msg":"Starting CWAgent...","Version":"1.300056.0b1123","NumCPU":4}
+2025-06-18T13:35:22Z I! {"caller":"extensions/extensions.go:39","msg":"Starting extensions..."}
+2025-06-18T13:35:22Z I! {"caller":"extensions/extensions.go:42","msg":"Extension is starting...","kind":"extension","name":"awsproxy/application_signals"}
+2025-06-18T13:35:22Z E! {"caller":"awsutil@v0.115.0/conn.go:390","msg":"Failed to get credential from session","kind":"extension","name":"awsproxy/application_signals","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: 94ed6274-f0cf-461a-b14c-df84d398d29c","stacktrace":"github.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil.GetDefaultSession\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil@v0.115.0/conn.go:390\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil.(*Conn).newAWSSession\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil@v0.115.0/conn.go:270\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil.GetAWSConfigSession\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil@v0.115.0/conn.go:217\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/proxy.NewServer\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/proxy@v0.115.0/server.go:53\ngithub.com/open-telemetry/opentelemetry-collector-contrib/extension/awsproxy.(*xrayProxy).Start\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/extension/awsproxy@v0.115.0/extension.go:29\ngo.opentelemetry.io/collector/service/extensions.(*Extensions).Start\n\tgo.opentelemetry.io/collector/service@v0.115.0/extensions/extensions.go:49\ngo.opentelemetry.io/collector/service.(*Service).Start\n\tgo.opentelemetry.io/collector/service@v0.115.0/service.go:243\ngo.opentelemetry.io/collector/otelcol.(*Collector).setupConfigurationComponents\n\tgo.opentelemetry.io/collector/otelcol@v0.115.0/collector.go:228\ngo.opentelemetry.io/collector/otelcol.(*Collector).Run\n\tgo.opentelemetry.io/collector/otelcol@v0.115.0/collector.go:282\ngo.opentelemetry.io/collector/otelcol.NewCommand.func1\n\tgo.opentelemetry.io/collector/otelcol@v0.115.0/command.go:36\ngithub.com/spf13/cobra.(*Command).execute\n\tgithub.com/spf13/cobra@v1.8.1/command.go:985\ngithub.com/spf13/cobra.(*Command).ExecuteC\n\tgithub.com/spf13/cobra@v1.8.1/command.go:1117\ngithub.com/spf13/cobra.(*Command).Execute\n\tgithub.com/spf13/cobra@v1.8.1/command.go:1041\nmain.runAgent\n\tgithub.com/aws/amazon-cloudwatch-agent/cmd/amazon-cloudwatch-agent/amazon-cloudwatch-agent.go:395\nmain.reloadLoop\n\tgithub.com/aws/amazon-cloudwatch-agent/cmd/amazon-cloudwatch-agent/amazon-cloudwatch-agent.go:180\nmain.main\n\tgithub.com/aws/amazon-cloudwatch-agent/cmd/amazon-cloudwatch-agent/amazon-cloudwatch-agent.go:673\nruntime.main\n\truntime/proc.go:283"}
+2025-06-18T13:35:22Z I! {"caller":"awsproxy@v0.115.0/extension.go:39","msg":"X-Ray proxy server started on 0.0.0.0:2000","kind":"extension","name":"awsproxy/application_signals"}
+2025-06-18T13:35:22Z I! {"caller":"extensions/extensions.go:59","msg":"Extension started.","kind":"extension","name":"awsproxy/application_signals"}
+2025-06-18T13:35:22Z I! {"caller":"extensions/extensions.go:42","msg":"Extension is starting...","kind":"extension","name":"agenthealth/statuscode"}
+2025-06-18T13:35:22Z I! {"caller":"extensions/extensions.go:59","msg":"Extension started.","kind":"extension","name":"agenthealth/statuscode"}
+2025-06-18T13:35:22Z E! Failed to get credential from session: WebIdentityErr: failed to retrieve credentials
+caused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity
+	status code: 403, request id: 36fe0e97-7770-4528-ad7c-77fc6cb2baf4
+W0618 13:35:22.744807       1 client_config.go:659] Neither --kubeconfig nor --master was specified.  Using the inClusterConfig.  This might not work.
+I0618 13:35:24.746896       1 shared_informer.go:313] Waiting for caches to sync for endpointSliceWatcher
+I0618 13:35:24.847660       1 shared_informer.go:320] Caches are synced for endpointSliceWatcher
+2025-06-18T13:35:24Z I! {"caller":"k8sclient/endpointslicewatcher.go:105","msg":"endpointSliceWatcher: Cache synced","kind":"extension","name":"k8smetadata"}
+I0618 13:35:24.847846       1 shared_informer.go:313] Waiting for caches to sync for serviceWatcher
+I0618 13:35:24.948933       1 shared_informer.go:320] Caches are synced for serviceWatcher
+2025-06-18T13:35:24Z I! {"caller":"k8sclient/servicewatcher.go:66","msg":"serviceWatcher: Cache synced","kind":"extension","name":"k8smetadata"}
+2025-06-18T13:35:24Z E! {"caller":"awsutil@v0.115.0/conn.go:390","msg":"Failed to get credential from session","kind":"exporter","data_type":"metrics","name":"awsemf/application_signals","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: e5908e56-8680-4cdf-9f02-064adaaede30","stacktrace":"github.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil.GetDefaultSession\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil@v0.115.0/conn.go:390\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil.(*Conn).newAWSSession\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil@v0.115.0/conn.go:270\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil.GetAWSConfigSession\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil@v0.115.0/conn.go:217\ngithub.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter.(*emfExporter).start\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter@v0.115.0/emf_exporter.go:200\ngo.opentelemetry.io/collector/component.StartFunc.Start\n\tgo.opentelemetry.io/collector/component@v0.115.0/component.go:66\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseExporter).Start\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/base_exporter.go:155\ngo.opentelemetry.io/collector/service/internal/graph.(*Graph).StartAll\n\tgo.opentelemetry.io/collector/service@v0.115.0/internal/graph/graph.go:419\ngo.opentelemetry.io/collector/service.(*Service).Start\n\tgo.opentelemetry.io/collector/service@v0.115.0/service.go:253\ngo.opentelemetry.io/collector/otelcol.(*Collector).setupConfigurationComponents\n\tgo.opentelemetry.io/collector/otelcol@v0.115.0/collector.go:228\ngo.opentelemetry.io/collector/otelcol.(*Collector).Run\n\tgo.opentelemetry.io/collector/otelcol@v0.115.0/collector.go:282\ngo.opentelemetry.io/collector/otelcol.NewCommand.func1\n\tgo.opentelemetry.io/collector/otelcol@v0.115.0/command.go:36\ngithub.com/spf13/cobra.(*Command).execute\n\tgithub.com/spf13/cobra@v1.8.1/command.go:985\ngithub.com/spf13/cobra.(*Command).ExecuteC\n\tgithub.com/spf13/cobra@v1.8.1/command.go:1117\ngithub.com/spf13/cobra.(*Command).Execute\n\tgithub.com/spf13/cobra@v1.8.1/command.go:1041\nmain.runAgent\n\tgithub.com/aws/amazon-cloudwatch-agent/cmd/amazon-cloudwatch-agent/amazon-cloudwatch-agent.go:395\nmain.reloadLoop\n\tgithub.com/aws/amazon-cloudwatch-agent/cmd/amazon-cloudwatch-agent/amazon-cloudwatch-agent.go:180\nmain.main\n\tgithub.com/aws/amazon-cloudwatch-agent/cmd/amazon-cloudwatch-agent/amazon-cloudwatch-agent.go:673\nruntime.main\n\truntime/proc.go:283"}
+2025-06-18T13:35:24Z I! {"caller":"resolver/kubernetes.go:152","msg":"k8smetadata extension is present","kind":"processor","name":"awsapplicationsignals","pipeline":"metrics/application_signals"}
+2025-06-18T13:35:24Z I! {"caller":"cardinalitycontrol/metrics_limiter.go:59","msg":"creating metrics limiter with config","kind":"processor","name":"awsapplicationsignals","pipeline":"metrics/application_signals","config":{"Threshold":500,"Disabled":false,"LogDroppedMetrics":false,"RotationInterval":3600000000000,"GarbageCollectionInterval":600000000000,"ParentContext":{}}}
+2025-06-18T13:35:24Z I! {"caller":"cardinalitycontrol/metrics_limiter.go:88","msg":"metrics limiter created.","kind":"processor","name":"awsapplicationsignals","pipeline":"metrics/application_signals"}
+2025-06-18T13:35:24Z I! {"caller":"internal/resourcedetection.go:140","msg":"began detecting resource information","kind":"processor","name":"resourcedetection","pipeline":"metrics/application_signals"}
+2025-06-18T13:35:25Z W! {"caller":"ec2/ec2.go:117","msg":"failed fetching ec2 instance tags","kind":"processor","name":"resourcedetection","pipeline":"metrics/application_signals","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: bd18f854-d70d-4740-abd8-1dc32a1b73da"}
+2025-06-18T13:35:25Z I! {"caller":"internal/resourcedetection.go:154","msg":"detected resource information","kind":"processor","name":"resourcedetection","pipeline":"metrics/application_signals","resource":{"cloud.account.id":"575108944090","cloud.availability_zone":"us-east-2a","cloud.platform":"aws_eks","cloud.provider":"aws","cloud.region":"us-east-2","host.id":"i-0669500d3bdff9b55","host.image.id":"ami-0b4d84436267eead8","host.name":"ip-10-1-8-16.us-east-2.compute.internal","host.type":"g4dn.xlarge"}}
+2025-06-18T13:35:25Z I! {"caller":"host/ec2metadata.go:91","msg":"Fetch instance id and type from ec2 metadata","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+I0618 13:35:25.174613       1 factory.go:219] Registration of the docker container factory failed: failed to validate Docker info: failed to detect Docker info: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
+I0618 13:35:25.174635       1 factory.go:221] Registration of the systemd container factory successfully
+I0618 13:35:25.175837       1 factory.go:221] Registration of the containerd container factory successfully
+I0618 13:35:25.175959       1 factory.go:219] Registration of the crio container factory failed: Get "http://%2Fvar%2Frun%2Fcrio%2Fcrio.sock/info": dial unix /var/run/crio/crio.sock: connect: connection refused
+W0618 13:35:25.176022       1 manager.go:306] Could not configure a source for OOM detection, disabling OOM events: open /dev/kmsg: no such file or directory
+2025-06-18T13:35:25Z I! {"caller":"host/ebsvolume.go:95","msg":"Fetch ebs volumes from ec2 api","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:35:25Z I! {"caller":"host/ec2tags.go:88","msg":"Fetch ec2 tags to detect cluster name and auto scaling group name","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","instanceId":"i-0669500d3bdff9b55"}
+2025-06-18T13:35:25Z W! {"caller":"host/ebsvolume.go:111","msg":"Fail to call ec2 DescribeVolumes","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: 5bd143f3-ccc0-45d7-bb9b-3ac8e02f757d"}
+2025-06-18T13:35:25Z W! {"caller":"host/ec2tags.go:109","msg":"Fail to call ec2 DescribeTags","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: 84551b8c-e0c7-4356-a1cc-86a17645fe1a","instanceId":"i-0669500d3bdff9b55"}
+2025-06-18T13:35:25Z I! {"caller":"host/ec2tags.go:140","msg":"Fetch ec2 tags successfully","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:35:25Z I! {"caller":"host/ec2tags.go:143","msg":"Fetch ec2 tags to detect cluster name and auto scaling group name","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","instanceId":""}
+2025-06-18T13:35:25Z I! {"caller":"k8sapiserver/leaderelection.go:124","msg":"configMap: &ConfigMap{ObjectMeta:{cwagent-clusterleader  amazon-cloudwatch  13fc67ea-b583-4c4f-87a5-1a6acd7c91e6 9631518 0 2025-06-04 17:37:59 +0000 UTC <nil> <nil> map[] map[control-plane.alpha.kubernetes.io/leader:{\"holderIdentity\":\"ip-10-1-8-16.us-east-2.compute.internal\",\"leaseDurationSeconds\":60,\"acquireTime\":\"2025-06-04T21:12:03Z\",\"renewTime\":\"2025-06-17T14:51:58Z\",\"leaderTransitions\":3,\"strategy\":\"\",\"preferredHolder\":\"\"}] [] [] []},Data:map[string]string{},BinaryData:map[string][]byte{},Immutable:nil,}, err: <nil>","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:35:25Z W! {"caller":"internal@v0.115.0/warning.go:40","msg":"Using the 0.0.0.0 address exposes this server to every network interface, which may facilitate Denial of Service attacks.","kind":"receiver","name":"otlp/application_signals","data_type":"traces","documentation":"https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md#safeguards-against-denial-of-service-attacks"}
+2025-06-18T13:35:25Z I! {"caller":"otlpreceiver@v0.115.0/otlp.go:112","msg":"Starting GRPC server","kind":"receiver","name":"otlp/application_signals","data_type":"traces","endpoint":"0.0.0.0:4315"}
+2025-06-18T13:35:25Z W! {"caller":"internal@v0.115.0/warning.go:40","msg":"Using the 0.0.0.0 address exposes this server to every network interface, which may facilitate Denial of Service attacks.","kind":"receiver","name":"otlp/application_signals","data_type":"traces","documentation":"https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md#safeguards-against-denial-of-service-attacks"}
+2025-06-18T13:35:25Z I! {"caller":"otlpreceiver@v0.115.0/otlp.go:169","msg":"Starting HTTP server","kind":"receiver","name":"otlp/application_signals","data_type":"traces","endpoint":"0.0.0.0:4316"}
+2025-06-18T13:35:25Z I! {"caller":"service@v0.115.0/service.go:261","msg":"Everything is ready. Begin running and processing data."}
+I0618 13:35:25.287508       1 leaderelection.go:254] attempting to acquire leader lease amazon-cloudwatch/cwagent-clusterleader...
+I0618 13:35:25.295524       1 leaderelection.go:268] successfully acquired lease amazon-cloudwatch/cwagent-clusterleader
+I0618 13:35:25.295623       1 event.go:377] Event(v1.ObjectReference{Kind:"ConfigMap", Namespace:"amazon-cloudwatch", Name:"cwagent-clusterleader", UID:"13fc67ea-b583-4c4f-87a5-1a6acd7c91e6", APIVersion:"v1", ResourceVersion:"10795254", FieldPath:""}): type: 'Normal' reason: 'LeaderElection' ip-10-1-8-16.us-east-2.compute.internal became leader
+2025-06-18T13:35:25Z I! {"caller":"k8sapiserver/leaderelection.go:217","msg":"Switch NewLeaderElection Leader: ip-10-1-8-16.us-east-2.compute.internal","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:35:25Z I! {"caller":"k8sapiserver/leaderelection.go:171","msg":"OnStartedLeading: ip-10-1-8-16.us-east-2.compute.internal","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:25Z I! {"caller":"host/ec2tags.go:88","msg":"Fetch ec2 tags to detect cluster name and auto scaling group name","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","instanceId":"i-0669500d3bdff9b55"}
+2025-06-18T13:36:25Z W! {"caller":"host/ec2tags.go:109","msg":"Fail to call ec2 DescribeTags","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: fe268d2e-9f0b-42cc-a1fc-318f4aedff01","instanceId":"i-0669500d3bdff9b55"}
+2025-06-18T13:36:25Z I! {"caller":"host/ec2tags.go:140","msg":"Fetch ec2 tags successfully","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:25Z I! {"caller":"host/ec2tags.go:143","msg":"Fetch ec2 tags to detect cluster name and auto scaling group name","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","instanceId":""}
+2025-06-18T13:36:30Z I! {"caller":"k8sapiserver/k8sapiserver.go:125","msg":"collect data from K8s API Server...","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:30Z I! {"caller":"k8sapiserver/prometheus_scraper.go:188","msg":"The scraper is not running, starting up the scraper","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:30Z I! {"caller":"prometheusreceiver@v0.115.0/metrics_receiver.go:118","msg":"Starting discovery manager","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:30Z I! {"caller":"targetallocator/manager.go:187","msg":"Scrape job added","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","jobName":"containerInsightsKubeAPIServerScraper/172.20.0.1"}
+2025-06-18T13:36:30Z I! {"caller":"prometheusscraper/simple_prometheus_scraper.go:90","msg":"The scraper is not running, starting up the scraper","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:30Z I! {"caller":"prometheusreceiver@v0.115.0/metrics_receiver.go:187","msg":"Starting scrape manager","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:30Z I! {"caller":"prometheusreceiver@v0.115.0/metrics_receiver.go:118","msg":"Starting discovery manager","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:30Z I! {"caller":"targetallocator/manager.go:187","msg":"Scrape job added","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","jobName":"containerInsightsDCGMExporterScraper"}
+2025-06-18T13:36:30Z I! {"caller":"kubernetes/kubernetes.go:331","msg":"Using pod service account via in-cluster config","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","discovery":"kubernetes","config":"containerInsightsDCGMExporterScraper"}
+2025-06-18T13:36:30Z I! {"caller":"prometheusreceiver@v0.115.0/metrics_receiver.go:187","msg":"Starting scrape manager","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics"}
+2025-06-18T13:36:30Z I! {"caller":"kubernetes/kubernetes.go:331","msg":"Using pod service account via in-cluster config","kind":"receiver","name":"awscontainerinsightreceiver","data_type":"metrics","discovery":"kubernetes","config":"containerInsightsNeuronMonitorScraper"}
+2025-06-18T13:36:35Z E! {"caller":"cwlogs@v0.115.0/cwlog_client.go:145","msg":"cwlog_client: Error occurs in PutLogEvents","kind":"exporter","data_type":"metrics","name":"awsemf/containerinsights","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: c95f1c33-dfdc-4488-a0ed-ee0ffaff7d3d","stacktrace":"github.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs.(*Client).PutLogEvents\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs@v0.115.0/cwlog_client.go:145\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs.(*logPusher).pushEventBatch\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs@v0.115.0/pusher.go:269\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs.(*logPusher).ForceFlush\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs@v0.115.0/pusher.go:248\ngithub.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter.(*emfExporter).pushMetricsData\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter@v0.115.0/emf_exporter.go:150\ngo.opentelemetry.io/collector/exporter/exporterhelper.(*metricsRequest).Export\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:61\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*TimeoutSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/timeout_sender.go:51\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper.(*metricsSenderWithObservability).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:160\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseExporter).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/base_exporter.go:137\ngo.opentelemetry.io/collector/exporter/exporterhelper.NewMetricsRequest.func1\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:135\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry.(*wrapperMetricsExporter).ConsumeMetrics\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry@v0.115.0/resource_to_telemetry.go:35\ngo.opentelemetry.io/collector/internal/fanoutconsumer.(*metricsConsumer).ConsumeMetrics\n\tgo.opentelemetry.io/collector/internal/fanoutconsumer@v0.115.0/metrics.go:60\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/batchprocessor.(*batchMetrics).export\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:486\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).sendItems\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:261\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).startLoop\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:221"}
+2025-06-18T13:36:35Z E! {"caller":"awsemfexporter@v0.115.0/emf_exporter.go:155","msg":"Error force flushing logs. Skipping to next logPusher.","kind":"exporter","data_type":"metrics","name":"awsemf/containerinsights","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: c95f1c33-dfdc-4488-a0ed-ee0ffaff7d3d","stacktrace":"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter.(*emfExporter).pushMetricsData\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter@v0.115.0/emf_exporter.go:155\ngo.opentelemetry.io/collector/exporter/exporterhelper.(*metricsRequest).Export\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:61\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*TimeoutSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/timeout_sender.go:51\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper.(*metricsSenderWithObservability).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:160\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseExporter).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/base_exporter.go:137\ngo.opentelemetry.io/collector/exporter/exporterhelper.NewMetricsRequest.func1\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:135\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry.(*wrapperMetricsExporter).ConsumeMetrics\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry@v0.115.0/resource_to_telemetry.go:35\ngo.opentelemetry.io/collector/internal/fanoutconsumer.(*metricsConsumer).ConsumeMetrics\n\tgo.opentelemetry.io/collector/internal/fanoutconsumer@v0.115.0/metrics.go:60\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/batchprocessor.(*batchMetrics).export\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:486\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).sendItems\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:261\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).startLoop\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:221"}
+2025-06-18T13:36:35Z E! {"caller":"internal/base_exporter.go:139","msg":"Exporting failed. Rejecting data.","kind":"exporter","data_type":"metrics","name":"awsemf/containerinsights","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: c95f1c33-dfdc-4488-a0ed-ee0ffaff7d3d","rejected_items":566,"stacktrace":"go.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseExporter).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/base_exporter.go:139\ngo.opentelemetry.io/collector/exporter/exporterhelper.NewMetricsRequest.func1\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:135\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry.(*wrapperMetricsExporter).ConsumeMetrics\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry@v0.115.0/resource_to_telemetry.go:35\ngo.opentelemetry.io/collector/internal/fanoutconsumer.(*metricsConsumer).ConsumeMetrics\n\tgo.opentelemetry.io/collector/internal/fanoutconsumer@v0.115.0/metrics.go:60\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/batchprocessor.(*batchMetrics).export\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:486\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).sendItems\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:261\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).startLoop\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:221"}
+2025-06-18T13:36:35Z W! {"caller":"batchprocessor@v0.115.0/batch_processor.go:263","msg":"Sender failed","kind":"processor","name":"batch/containerinsights","pipeline":"metrics/containerinsights","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: c95f1c33-dfdc-4488-a0ed-ee0ffaff7d3d"}
+2025-06-18T13:37:00Z E! {"caller":"cwlogs@v0.115.0/cwlog_client.go:145","msg":"cwlog_client: Error occurs in PutLogEvents","kind":"exporter","data_type":"metrics","name":"awsemf/containerinsights","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: 2f182400-352b-49bc-9f3b-e1b291809ff0","stacktrace":"github.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs.(*Client).PutLogEvents\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs@v0.115.0/cwlog_client.go:145\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs.(*logPusher).pushEventBatch\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs@v0.115.0/pusher.go:269\ngithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs.(*logPusher).ForceFlush\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/cwlogs@v0.115.0/pusher.go:248\ngithub.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter.(*emfExporter).pushMetricsData\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter@v0.115.0/emf_exporter.go:150\ngo.opentelemetry.io/collector/exporter/exporterhelper.(*metricsRequest).Export\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:61\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*TimeoutSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/timeout_sender.go:51\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper.(*metricsSenderWithObservability).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:160\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseExporter).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/base_exporter.go:137\ngo.opentelemetry.io/collector/exporter/exporterhelper.NewMetricsRequest.func1\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:135\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry.(*wrapperMetricsExporter).ConsumeMetrics\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry@v0.115.0/resource_to_telemetry.go:35\ngo.opentelemetry.io/collector/internal/fanoutconsumer.(*metricsConsumer).ConsumeMetrics\n\tgo.opentelemetry.io/collector/internal/fanoutconsumer@v0.115.0/metrics.go:60\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/batchprocessor.(*batchMetrics).export\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:486\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).sendItems\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:261\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).startLoop\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:221"}
+2025-06-18T13:37:00Z E! {"caller":"awsemfexporter@v0.115.0/emf_exporter.go:155","msg":"Error force flushing logs. Skipping to next logPusher.","kind":"exporter","data_type":"metrics","name":"awsemf/containerinsights","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: 2f182400-352b-49bc-9f3b-e1b291809ff0","stacktrace":"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter.(*emfExporter).pushMetricsData\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter@v0.115.0/emf_exporter.go:155\ngo.opentelemetry.io/collector/exporter/exporterhelper.(*metricsRequest).Export\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:61\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*TimeoutSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/timeout_sender.go:51\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper.(*metricsSenderWithObservability).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:160\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseRequestSender).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/request_sender.go:28\ngo.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseExporter).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/base_exporter.go:137\ngo.opentelemetry.io/collector/exporter/exporterhelper.NewMetricsRequest.func1\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:135\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry.(*wrapperMetricsExporter).ConsumeMetrics\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry@v0.115.0/resource_to_telemetry.go:35\ngo.opentelemetry.io/collector/internal/fanoutconsumer.(*metricsConsumer).ConsumeMetrics\n\tgo.opentelemetry.io/collector/internal/fanoutconsumer@v0.115.0/metrics.go:60\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/batchprocessor.(*batchMetrics).export\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:486\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).sendItems\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:261\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).startLoop\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:221"}
+2025-06-18T13:37:00Z E! {"caller":"internal/base_exporter.go:139","msg":"Exporting failed. Rejecting data.","kind":"exporter","data_type":"metrics","name":"awsemf/containerinsights","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: 2f182400-352b-49bc-9f3b-e1b291809ff0","rejected_items":15,"stacktrace":"go.opentelemetry.io/collector/exporter/exporterhelper/internal.(*BaseExporter).Send\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/internal/base_exporter.go:139\ngo.opentelemetry.io/collector/exporter/exporterhelper.NewMetricsRequest.func1\n\tgo.opentelemetry.io/collector/exporter@v0.115.0/exporterhelper/metrics.go:135\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry.(*wrapperMetricsExporter).ConsumeMetrics\n\tgithub.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry@v0.115.0/resource_to_telemetry.go:35\ngo.opentelemetry.io/collector/internal/fanoutconsumer.(*metricsConsumer).ConsumeMetrics\n\tgo.opentelemetry.io/collector/internal/fanoutconsumer@v0.115.0/metrics.go:60\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/processorhelper.NewMetrics.func1\n\tgo.opentelemetry.io/collector/processor@v0.115.0/processorhelper/metrics.go:66\ngo.opentelemetry.io/collector/consumer.ConsumeMetricsFunc.ConsumeMetrics\n\tgo.opentelemetry.io/collector/consumer@v1.22.0/metrics.go:26\ngo.opentelemetry.io/collector/processor/batchprocessor.(*batchMetrics).export\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:486\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).sendItems\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:261\ngo.opentelemetry.io/collector/processor/batchprocessor.(*shard[...]).startLoop\n\tgo.opentelemetry.io/collector/processor/batchprocessor@v0.115.0/batch_processor.go:221"}
+2025-06-18T13:37:00Z W! {"caller":"batchprocessor@v0.115.0/batch_processor.go:263","msg":"Sender failed","kind":"processor","name":"batch/containerinsights","pipeline":"metrics/containerinsights","error":"WebIdentityErr: failed to retrieve credentials\ncaused by: AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity\n\tstatus code: 403, request id: 2f182400-352b-49bc-9f3b-e1b291809ff0"}

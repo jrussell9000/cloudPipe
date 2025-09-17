@@ -1,0 +1,953 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "additionalProperties": false,
+  "definitions": {
+    "agent": {
+      "additionalProperties": false,
+      "properties": {
+        "affinity": {
+          "default": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "eks.amazonaws.com/compute-type",
+                        "operator": "NotIn",
+                        "values": [
+                          "fargate"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "description": "Affinity configuration for CloudWatch Agent for scheduling pods with compute type excluding Fargate",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "autoGenerateCert": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": true,
+              "title": "Enable auto generation of TLS certs",
+              "type": "boolean"
+            },
+            "expiryDays": {
+              "title": "Days to expire for auto generated certs. Defaults to 10 years when not specified",
+              "type": "integer"
+            }
+          },
+          "title": "Auto generate TLS certs",
+          "type": "object"
+        },
+        "certManager": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "Enable management of TLS certs using cert-manager",
+              "type": "boolean"
+            }
+          },
+          "title": "Manage TLS certs using cert-manager",
+          "type": "object"
+        },
+        "config": {
+          "additionalProperties": true,
+          "title": "The JSON config to be supplied to the CloudWatch Agent",
+          "type": "object"
+        },
+        "mode": {
+          "default": "daemonset",
+          "enum": [
+            "daemonset",
+            "deployment",
+            "statefulset"
+          ],
+          "title": "The mode for the CloudWatch Agent workload (Can be deployment / daemonset / statefulset, defaults to daemonset)",
+          "type": "string"
+        },
+        "name": {
+          "title": "The name of the CloudWatch Agent workload",
+          "type": "string"
+        },
+        "nodeSelector": {
+          "default": {
+            "kubernetes.io/os": "linux"
+          },
+          "description": "Node Selector for the CloudWatch Agent",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "otelConfig": {
+          "additionalProperties": true,
+          "title": "The supplemental OpenTelemetry Collector YAML to be supplied to the CloudWatch Agent",
+          "type": "object"
+        },
+        "priorityClassName": {
+          "default": "system-node-critical",
+          "description": "Priority class for the CloudWatch Agent Daemonset",
+          "type": "string"
+        },
+        "prometheus": {
+          "additionalProperties": false,
+          "properties": {
+            "config": {
+              "title": "The Prometheus YAML scrape config",
+              "type": "object"
+            },
+            "targetAllocator": {
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "title": "Enable Prometheus Target Allocator",
+                  "type": "boolean"
+                },
+                "prometheusCR": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "default": false,
+                      "title": "Enable Prometheus CR monitoring by Target Allocator",
+                      "type": "boolean"
+                    }
+                  },
+                  "title": "Configuration of Prometheus CR monitoring by Target Allocator",
+                  "type": "object"
+                }
+              },
+              "title": "Configuration of Prometheus Target Allocator",
+              "type": "object"
+            }
+          },
+          "title": "Prometheus specific configuration",
+          "type": "object"
+        },
+        "replicas": {
+          "default": 1,
+          "title": "Replica count to set on the CloudWatch Agent workload (Defaults to 1)",
+          "type": "integer"
+        },
+        "resources": {
+          "default": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "250m",
+              "memory": "128Mi"
+            }
+          },
+          "description": "Resource requests/limits of the CloudWatch Agent pod",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "tolerations": {
+          "default": null,
+          "description": "Tolerations for CloudWatch Agent for scheduling pods with taints",
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "updateStrategy": {
+          "default": {
+            "rollingUpdate": {
+              "maxSurge": "0",
+              "maxUnavailable": "1"
+            },
+            "type": "RollingUpdate"
+          },
+          "description": "Update Strategy for the CloudWatch Agent Daemonset",
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "title": "CloudWatch Agent specific configuration",
+      "type": "object"
+    }
+  },
+  "description": "Amazon CloudWatch Observability configuration",
+  "properties": {
+    "admissionWebhooks": {
+      "additionalProperties": false,
+      "properties": {
+        "autoGenerateCert": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": true,
+              "title": "Enable auto generation of TLS certs",
+              "type": "boolean"
+            },
+            "expiryDays": {
+              "title": "Days to expire for auto generated certs. Defaults to 10 years when not specified",
+              "type": "integer"
+            }
+          },
+          "title": "Auto generate TLS certs",
+          "type": "object"
+        },
+        "certManager": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "Enable management of TLS certs using cert-manager",
+              "type": "boolean"
+            }
+          },
+          "title": "Manage TLS certs using cert-manager",
+          "type": "object"
+        }
+      },
+      "title": "Admission Webhooks specific configuration",
+      "type": "object"
+    },
+    "agent": {
+      "$ref": "#/definitions/agent"
+    },
+    "agents": {
+      "default": [
+        {
+          "name": "cloudwatch-agent"
+        }
+      ],
+      "description": "List of CloudWatch Agent workloads",
+      "items": {
+        "$ref": "#/definitions/agent"
+      },
+      "type": "array"
+    },
+    "containerLogs": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enable container logging on the cluster",
+          "type": "boolean"
+        },
+        "fluentBit": {
+          "additionalProperties": false,
+          "properties": {
+            "affinity": {
+              "default": {
+                "nodeAffinity": {
+                  "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                      {
+                        "matchExpressions": [
+                          {
+                            "key": "eks.amazonaws.com/compute-type",
+                            "operator": "NotIn",
+                            "values": [
+                              "fargate"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              "description": "Affinity configuration for the FluentBit Daemonset for scheduling pods with compute type excluding Fargate",
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "config": {
+              "additionalProperties": false,
+              "properties": {
+                "customParsers": {
+                  "title": "Define the Parsers configuration to be used for FluentBit. For default configuration refer https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html#install-CloudWatch-Observability-EKS-addon-configuration",
+                  "type": "string"
+                },
+                "extraFiles": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "application-log.conf": {
+                      "title": "Customize application logs configuration. For default configuration refer https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html#install-CloudWatch-Observability-EKS-addon-configuration",
+                      "type": "string"
+                    },
+                    "dataplane-log.conf": {
+                      "title": "Customize dataplane logs configuration. For default configuration refer https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html#install-CloudWatch-Observability-EKS-addon-configuration",
+                      "type": "string"
+                    },
+                    "host-log.conf": {
+                      "title": "Customize host logs configuration. For default configuration refer https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html#install-CloudWatch-Observability-EKS-addon-configuration",
+                      "type": "string"
+                    }
+                  },
+                  "title": "Additional conf files to include alongside the FluentBit configuration",
+                  "type": "object"
+                },
+                "service": {
+                  "title": "Provide the Service section of the FluentBit config to define global properties. For default configuration refer https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/install-CloudWatch-Observability-EKS-addon.html#install-CloudWatch-Observability-EKS-addon-configuration",
+                  "type": "string"
+                }
+              },
+              "title": "The configuration to be supplied to FluentBit",
+              "type": "object"
+            },
+            "nodeSelector": {
+              "default": {
+                "kubernetes.io/os": "linux"
+              },
+              "description": "Node Selector for the FluentBit Daemonset",
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "priorityClassName": {
+              "default": "system-node-critical",
+              "description": "Priority class for the FluentBit Daemonset",
+              "type": "string"
+            },
+            "resources": {
+              "default": {
+                "limits": {
+                  "cpu": "500m",
+                  "memory": "250Mi"
+                },
+                "requests": {
+                  "cpu": "50m",
+                  "memory": "25Mi"
+                }
+              },
+              "description": "Resource requests/limits of the FluentBit pod",
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "tolerations": {
+              "default": null,
+              "description": "Tolerations for FluentBit DaemonSet scheduling pods with taints",
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "updateStrategy": {
+              "default": {
+                "rollingUpdate": {
+                  "maxSurge": "0",
+                  "maxUnavailable": "1"
+                },
+                "type": "RollingUpdate"
+              },
+              "description": "Update Strategy for the FluentBit Daemonset",
+              "type": [
+                "object",
+                "null"
+              ]
+            }
+          },
+          "title": "FluentBit specific configuration",
+          "type": "object"
+        }
+      },
+      "title": "Container Logging specific configuration",
+      "type": "object"
+    },
+    "dcgmExporter": {
+      "additionalProperties": false,
+      "properties": {
+        "affinity": {
+          "default": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "node.kubernetes.io/instance-type",
+                        "operator": "In",
+                        "values": [
+                          "g3.4xlarge",
+                          "g3.8xlarge",
+                          "g3.16xlarge",
+                          "g3s.xlarge",
+                          "g4ad.2xlarge",
+                          "g4ad.4xlarge",
+                          "g4ad.8xlarge",
+                          "g4ad.16xlarge",
+                          "g4ad.xlarge",
+                          "g4dn.2xlarge",
+                          "g4dn.4xlarge",
+                          "g4dn.8xlarge",
+                          "g4dn.12xlarge",
+                          "g4dn.16xlarge",
+                          "g4dn.metal",
+                          "g4dn.xlarge",
+                          "g5.2xlarge",
+                          "g5.4xlarge",
+                          "g5.8xlarge",
+                          "g5.12xlarge",
+                          "g5.16xlarge",
+                          "g5.24xlarge",
+                          "g5.48xlarge",
+                          "g5.xlarge",
+                          "g5g.2xlarge",
+                          "g5g.4xlarge",
+                          "g5g.8xlarge",
+                          "g5g.16xlarge",
+                          "g5g.metal",
+                          "g5g.xlarge",
+                          "g6.2xlarge",
+                          "g6.4xlarge",
+                          "g6.8xlarge",
+                          "g6.12xlarge",
+                          "g6.16xlarge",
+                          "g6.24xlarge",
+                          "g6.48xlarge",
+                          "g6.xlarge",
+                          "g6e.2xlarge",
+                          "g6e.4xlarge",
+                          "g6e.8xlarge",
+                          "g6e.12xlarge",
+                          "g6e.16xlarge",
+                          "g6e.24xlarge",
+                          "g6e.48xlarge",
+                          "g6e.xlarge",
+                          "gr6.4xlarge",
+                          "gr6.8xlarge",
+                          "p2.8xlarge",
+                          "p2.16xlarge",
+                          "p2.xlarge",
+                          "p3.2xlarge",
+                          "p3.8xlarge",
+                          "p3.16xlarge",
+                          "p3dn.24xlarge",
+                          "p4d.24xlarge",
+                          "p4de.24xlarge",
+                          "p5.48xlarge",
+                          "p5e.48xlarge",
+                          "p5en.48xlarge",
+                          "ml.g3.4xlarge",
+                          "ml.g3.8xlarge",
+                          "ml.g3.16xlarge",
+                          "ml.g3s.xlarge",
+                          "ml.g4ad.2xlarge",
+                          "ml.g4ad.4xlarge",
+                          "ml.g4ad.8xlarge",
+                          "ml.g4ad.16xlarge",
+                          "ml.g4ad.xlarge",
+                          "ml.g4dn.2xlarge",
+                          "ml.g4dn.4xlarge",
+                          "ml.g4dn.8xlarge",
+                          "ml.g4dn.12xlarge",
+                          "ml.g4dn.16xlarge",
+                          "ml.g4dn.metal",
+                          "ml.g4dn.xlarge",
+                          "ml.g5.2xlarge",
+                          "ml.g5.4xlarge",
+                          "ml.g5.8xlarge",
+                          "ml.g5.12xlarge",
+                          "ml.g5.16xlarge",
+                          "ml.g5.24xlarge",
+                          "ml.g5.48xlarge",
+                          "ml.g5.xlarge",
+                          "ml.g5g.2xlarge",
+                          "ml.g5g.4xlarge",
+                          "ml.g5g.8xlarge",
+                          "ml.g5g.16xlarge",
+                          "ml.g5g.metal",
+                          "ml.g5g.xlarge",
+                          "ml.g6.2xlarge",
+                          "ml.g6.4xlarge",
+                          "ml.g6.8xlarge",
+                          "ml.g6.12xlarge",
+                          "ml.g6.16xlarge",
+                          "ml.g6.24xlarge",
+                          "ml.g6.48xlarge",
+                          "ml.g6.xlarge",
+                          "ml.g6e.2xlarge",
+                          "ml.g6e.4xlarge",
+                          "ml.g6e.8xlarge",
+                          "ml.g6e.12xlarge",
+                          "ml.g6e.16xlarge",
+                          "ml.g6e.24xlarge",
+                          "ml.g6e.48xlarge",
+                          "ml.g6e.xlarge",
+                          "ml.gr6.4xlarge",
+                          "ml.gr6.8xlarge",
+                          "ml.p2.8xlarge",
+                          "ml.p2.16xlarge",
+                          "ml.p2.xlarge",
+                          "ml.p3.2xlarge",
+                          "ml.p3.8xlarge",
+                          "ml.p3.16xlarge",
+                          "ml.p3dn.24xlarge",
+                          "ml.p4d.24xlarge",
+                          "ml.p4de.24xlarge",
+                          "ml.p5.48xlarge",
+                          "ml.p5e.48xlarge",
+                          "ml.p5en.48xlarge"
+                        ]
+                      },
+                      {
+                        "key": "eks.amazonaws.com/compute-type",
+                        "operator": "NotIn",
+                        "values": [
+                          "fargate"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "description": "Affinity configuration for DCGM Exporter DaemonSet for scheduling pods based on NVIDIA GPU instance types",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "nodeSelector": {
+          "default": {
+            "kubernetes.io/os": "linux"
+          },
+          "description": "Node Selector for the DCGM Exporter Daemonset",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "resources": {
+          "default": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "500Mi"
+            },
+            "requests": {
+              "cpu": "250m",
+              "memory": "128Mi"
+            }
+          },
+          "description": "Resource requests/limits of the DCGM Exporter pod",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "tolerations": {
+          "default": null,
+          "description": "Tolerations for scheduling pods with taints",
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "title": "DCGM Exporter specific configuration",
+      "type": "object"
+    },
+    "manager": {
+      "additionalProperties": false,
+      "properties": {
+        "affinity": {
+          "default": {},
+          "description": "Affinity configuration for CloudWatchAgent Operator",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "autoAnnotateAutoInstrumentation": {
+          "additionalProperties": false,
+          "properties": {
+            "dotnet": {
+              "additionalProperties": false,
+              "properties": {
+                "daemonsets": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster daemonsets. Specify in the namespace/daemonset format",
+                  "type": "array"
+                },
+                "deployments": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster deployments. Specify in the namespace/deployment format",
+                  "type": "array"
+                },
+                "namespaces": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster namespaces",
+                  "type": "array"
+                },
+                "statefulsets": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster statefulsets. Specify in the namespace/statefulset format",
+                  "type": "array"
+                }
+              },
+              "title": "Auto Annotate cluster resources for dotnet",
+              "type": "object"
+            },
+            "java": {
+              "additionalProperties": false,
+              "properties": {
+                "daemonsets": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster daemonsets. Specify in the namespace/daemonset format",
+                  "type": "array"
+                },
+                "deployments": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster deployments. Specify in the namespace/deployment format",
+                  "type": "array"
+                },
+                "namespaces": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster namespaces",
+                  "type": "array"
+                },
+                "statefulsets": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster statefulsets. Specify in the namespace/statefulset format",
+                  "type": "array"
+                }
+              },
+              "title": "Auto Annotate cluster resources for java",
+              "type": "object"
+            },
+            "nodejs": {
+              "additionalProperties": false,
+              "properties": {
+                "daemonsets": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster daemonsets. Specify in the namespace/daemonset format",
+                  "type": "array"
+                },
+                "deployments": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster deployments. Specify in the namespace/deployment format",
+                  "type": "array"
+                },
+                "namespaces": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster namespaces",
+                  "type": "array"
+                },
+                "statefulsets": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster statefulsets. Specify in the namespace/statefulset format",
+                  "type": "array"
+                }
+              },
+              "title": "Auto Annotate cluster resources for nodejs",
+              "type": "object"
+            },
+            "python": {
+              "additionalProperties": false,
+              "properties": {
+                "daemonsets": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster daemonsets. Specify in the namespace/daemonset format",
+                  "type": "array"
+                },
+                "deployments": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster deployments. Specify in the namespace/deployment format",
+                  "type": "array"
+                },
+                "namespaces": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster namespaces",
+                  "type": "array"
+                },
+                "statefulsets": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Auto Annotate cluster statefulsets. Specify in the namespace/statefulset format",
+                  "type": "array"
+                }
+              },
+              "title": "Auto Annotate cluster resources for python",
+              "type": "object"
+            }
+          },
+          "title": "Auto Annotate cluster resources to enable Auto Instrumentation via the Operator",
+          "type": "object"
+        },
+        "autoInstrumentationConfiguration": {
+          "additionalProperties": false,
+          "properties": {
+            "dotnet": {
+              "additionalProperties": false,
+              "properties": {
+                "runtime_metrics": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "default": true,
+                      "title": "Enable dotnet runtime metrics",
+                      "type": "boolean"
+                    }
+                  },
+                  "title": "Configuration for Auto Instrumentation for dotnet runtime metrics",
+                  "type": "object"
+                }
+              },
+              "title": "Configuration for Auto Instrumentation for dotnet",
+              "type": "object"
+            },
+            "java": {
+              "additionalProperties": false,
+              "properties": {
+                "runtime_metrics": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "default": true,
+                      "title": "Enable java runtime metrics",
+                      "type": "boolean"
+                    }
+                  },
+                  "title": "Configuration for Auto Instrumentation for java runtime metrics",
+                  "type": "object"
+                }
+              },
+              "title": "Configuration for Auto Instrumentation for java",
+              "type": "object"
+            },
+            "python": {
+              "additionalProperties": false,
+              "properties": {
+                "runtime_metrics": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "default": true,
+                      "title": "Enable python runtime metrics",
+                      "type": "boolean"
+                    }
+                  },
+                  "title": "Configuration for Auto Instrumentation for python runtime metrics",
+                  "type": "object"
+                }
+              },
+              "title": "Configuration for Auto Instrumentation for python",
+              "type": "object"
+            }
+          },
+          "title": "Configuration for Auto Instrumentation",
+          "type": "object"
+        },
+        "nodeSelector": {
+          "default": {
+            "kubernetes.io/os": "linux"
+          },
+          "description": "Node Selector for the CloudWatch Agent Operator",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "resources": {
+          "default": {
+            "requests": {
+              "cpu": "100m",
+              "memory": "64Mi"
+            }
+          },
+          "description": "Resource requests/limits of the CloudWatchAgent Operator pod",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "tolerations": {
+          "default": [],
+          "description": "Tolerations for CloudWatchAgent Operator scheduling pods with taints",
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "title": "CloudWatchAgent Operator specific configuration",
+      "type": "object"
+    },
+    "neuronMonitor": {
+      "additionalProperties": false,
+      "properties": {
+        "affinity": {
+          "default": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "node.kubernetes.io/instance-type",
+                        "operator": "In",
+                        "values": [
+                          "trn1.2xlarge",
+                          "trn1.32xlarge",
+                          "trn1n.32xlarge",
+                          "trn2.3xlarge",
+                          "trn2.48xlarge",
+                          "trn2a.48xlarge",
+                          "trn2n.48xlarge",
+                          "trn2u.48xlarg",
+                          "inf1.xlarge",
+                          "inf1.2xlarge",
+                          "inf1.6xlarge",
+                          "inf1.24xlarge",
+                          "inf2.xlarge",
+                          "inf2.8xlarge",
+                          "inf2.24xlarge",
+                          "inf2.48xlarge",
+                          "ml.trn1.2xlarge",
+                          "ml.trn1.32xlarge",
+                          "ml.trn1n.32xlarge",
+                          "ml.inf1.xlarge",
+                          "ml.inf1.2xlarge",
+                          "ml.inf1.6xlarge",
+                          "ml.inf1.24xlarge",
+                          "ml.inf2.xlarge",
+                          "ml.inf2.8xlarge",
+                          "ml.inf2.24xlarge",
+                          "ml.inf2.48xlarge"
+                        ]
+                      },
+                      {
+                        "key": "eks.amazonaws.com/compute-type",
+                        "operator": "NotIn",
+                        "values": [
+                          "fargate"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "description": "Affinity configuration for Neuron Monitor DaemonSet for scheduling pods excluding Fargate",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "nodeSelector": {
+          "default": {
+            "kubernetes.io/os": "linux"
+          },
+          "description": "Node Selector for the Neuron Monitor Daemonset",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "resources": {
+          "default": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "256Mi"
+            },
+            "requests": {
+              "cpu": "256m",
+              "memory": "128Mi"
+            }
+          },
+          "description": "Resource requests/limits of the Neuron Monitor pod",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "tolerations": {
+          "default": null,
+          "description": "Tolerations for scheduling pods with taints",
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "title": "Neuron Monitor specific configuration",
+      "type": "object"
+    },
+    "tolerations": {
+      "default": [
+        {
+          "key": "",
+          "operator": "Exists"
+        }
+      ],
+      "items": {
+        "type": "object"
+      },
+      "title": "Tolerations to apply to all pod workloads installed by the EKS add-on",
+      "type": "array"
+    }
+  },
+  "type": "object"
+}

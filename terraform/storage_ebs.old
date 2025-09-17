@@ -1,0 +1,37 @@
+resource "helm_release" "csi_driver_nfs" {
+  name             = "csi-driver-nfs"
+  repository       = "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts"
+  chart            = "csi-driver-nfs"
+  namespace        = "kube-system"
+  create_namespace = false
+  cleanup_on_fail  = true
+}
+
+resource "helm_release" "nfs_server" {
+  name             = "nfs-server-provisioner"
+  repository       = "https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/"
+  chart            = "nfs-server-provisioner"
+  namespace        = "kube-system"
+  create_namespace = false
+  cleanup_on_fail  = true
+  recreate_pods    = true
+
+  values = [
+    <<-EOT
+      image:
+        # See https://github.com/kubernetes-sigs/nfs-ganesha-server-and-external-provisioner/issues/153
+        repository: devxygmbh/nfs-server-provisioner
+        tag: latest
+      # See https://github.com/kubernetes-sigs/nfs-ganesha-server-and-external-provisioner/tree/master/charts/nfs-server-provisioner
+      persistence:
+        enabled: true
+        storageClass: ebs-sc
+        size: 1000Gi
+        reclaimPolicy: Delete
+      storageClass:
+        defaultClass: false
+        mountOptions:
+          - vers=4.1
+    EOT
+  ]
+}

@@ -1,0 +1,185 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: xcpd-workflow-template
+  namespace: argo-workflows
+
+spec:
+  templates:
+
+  - name: functional-postprocessing-steps-template
+    inputs:
+      parameters:
+      - name: session
+
+    steps:
+    - - name: scanfortasknamesstep
+        template: scan-for-tasknames-template
+        arguments:
+          parameters:
+            - name: session
+              value: "{{inputs.parameters.session}}"
+
+    - - name: xcpd-processing-step
+        template: xcpd-processing-template
+        arguments:
+          parameters:
+            - name: session
+              value: "{{inputs.parameters.session}}"
+            - name: task
+              value: "{{item}}"
+          withParam: "{{steps.scanfortasknamesstep.outputs.result}}"
+
+
+  - name: scan-for-tasknames-template
+    inputs:
+      parameters:
+        - name: session
+    # In theory, it should be possible to replace all this with expr code in the fastsurfer container args. In theory...
+    script:
+      image: public.ecr.aws/docker/library/python:3-slim-bullseye
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          ephemeral-storage: 50M
+      volumeMounts:
+        # fmriprep base directory
+        # PersistentVolumeClaim reference
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where the volume will be mounted
+        mountPath: /home/fmriprep
+        # Volume path to which we're linking (no starting '/')
+        # Name the directory after the session so that the 
+        # fmriprep directory on the container is always empty at the start
+        subPath: '{{inputs.parameters.session}}'
+      command: [python]
+      
+      source: |
+        import json
+        from pathlib import Path
+        session = "{{inputs.parameters.session}}"
+        subjID = "sub-{{workflow.parameters.ndaGUID}}"
+        tasks = list(set([str(fname).split('_')[2].split('-')[1] for fname in Path(f'/home/fmriprep/output/{subjID}/{session}/func').glob('*')]))
+        print(json.dumps(tasks))
+
+  - name: xcpd-processing-super-template
+    inputs:
+      parameters:
+        - name: task
+
+    steps:
+    - - name: process-rest-step
+        template: process-rest-template
+        when: "{{inputs.parameters.task}} == rest"
+        arguments:
+          parameters:
+            - name: session
+              value: "{{inputs.parameters.session}}"
+
+    - - name: process-nback-step
+        template: process-nback-template
+        when: "{{inputs.parameters.task}} == nback"
+        arguments:
+          parameters:
+            - name: session
+              value: "{{inputs.parameters.session}}"
+
+  - name: process-rest-template
+    inputs:
+      pararameters:
+        - name: session
+
+    container:
+      securityContext:
+        runAsUser: 0
+
+      image: pennlinc/xcp_d:latest
+      imagePullPolicy: IfNotPresent
+
+      volumeMounts:
+        # fmriprep base directory
+        # PersistentVolumeClaim reference
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where the volume will be mounted
+        mountPath: /home/fmriprep
+        # Volume path to which we're linking (no starting '/')
+        # Name the directory after the session so that the 
+        # fmriprep directory on the container is always empty at the start
+        subPath: '{{inputs.parameters.session}}'
+
+      resources:
+        requests:
+          memory: 16G
+          cpu: '8'
+          # ephemeral-storage: 50G
+
+      outputs:
+        artifacts:
+        - name: fmriprep-output
+          path: /home/fmriprep/xcpd_output/{{workflow.parameters.subjID}}
+          s3:
+            endpoint: s3-accelerate.amazonaws.com
+            bucket: 'abcd-working'
+            key: 'derivatives/fmriprep/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/rest-xcpd-output.tar.gz'
+            region: us-east-2
+
+      args:
+        - '/home/fmriprep/output/{{workflow.parameters.subjID}}'
+        - '/home/fmriprep/xcpd_output/{{workflow.parameters.subjID}}/'
+        - 'participant'
+        - '--participant-label'
+        - '{{workflow.parameters.subjID}}'
+        - '--task-id'
+        - 'rest'
+        - '--input-type'
+        - 'fmriprep'
+        - '--file-format'
+        - 'cifti'
+        - '--dummy-scans' # Ideally, this would use values from the footnote in Hagler et al. 2017
+        - 'auto'
+        - '--despike'
+        - 'y'
+        # see https://www.nature.com/articles/s41467-024-48781-5 Supplement 1 - suggests no GSR
+        # see https://www.sciencedirect.com/science/article/pii/S1053811917302288 Fig. 1 - ICA-AROMA is 'best' non-GSR model
+        # available regressor options at: https://xcp-d.readthedocs.io/en/latest/workflows.html#confound-regressor-selection
+        - '--nuisance-regressors'
+        - 'aroma' 
+        - '--smoothing'
+        - '0' # see https://onlinelibrary.wiley.com/doi/10.1111/ejn.13717 which recommends against smoothing for graph theory analyses
+        - '--combine-runs'
+        - 'y'
+        - '--motion-filter-type'
+        - 'lp'
+        - '--band-stop-min'
+        - '6' # breaths per minute (or 0.1Hz)
+        - '--motion-filter-order'
+        - '4' # default when motion-filter-type is set to 'lp'
+        - '--fd-thresh'
+        - '0' # <= 0 disables fd thresholding # Does this still allow motion info to be used in nuisance regression???
+        - '--min-time' # Not used when fd thresholding is disabled
+        - '4' # default
+        - '--output-type'
+        - 'censored'
+        - '--lower-bpf'
+        - '0.01' # default
+        - '--upper-bf'
+        - '0.08' # default
+        - '--atlases'
+        - '4S556Parcels' # Need Schaefer 400 + Tian
+        # see: https://xcp-d.readthedocs.io/en/latest/workflows.html#abcd-mode
+        #- '--create-matrices' # Creates matrices from a random subsample of volumes
+        - '--random-seed'
+        - '52618'
+        - '--linc-qc'
+        - 'y'
+        - '--abcc-qc'
+        - 'y'
+        - '--report-output-level'
+        - 'session'
+        - '--aggregate-session-reports'
+        - '10'
+        - '--clean-workdir'
+        - 'True'
+        - '--notrack'
+        - 'True'
+        - '--warp-surfaces-native2std'

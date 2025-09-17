@@ -1,0 +1,146 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  generateName: s3test-
+  namespace: argo-workflows
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::026415314835:role/argo-workflows-s3access
+spec:
+  archiveLogs: true
+  serviceAccountName: argo-workflows-s3access
+
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+  # Formatting Notes:
+  # * Underscores are not allowed in template or task names
+  # * Template names must be in lower case, task names should be camel case
+  # * DO NOT use hyphens if the object will later be referenced by jsonPath
+  #   which treats hyphens as a subtraction sign (this SHOULD be fixable...)
+  entrypoint: fastsurfer-template
+  templates:
+  - name: fastsurfer-template
+    dag:
+      tasks: 
+      - name: generateCommandString
+        template: generatecommandstring
+
+      - name: fastsurfer-template-creation-dagtask
+        template: fastsurfer-template-creation-template
+        arguments:
+          parameters:
+            - name: commandstring
+              value: "{{tasks.generateCommandString.outputs.result}}"
+        dependencies:
+          - generateCommandString
+
+  # template names must be lower case 
+  - name: generatecommandstring
+    inputs:
+      artifacts: 
+      - name: T1w_Y0
+        # Container path where the output will be saved
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-baselineYear1Arm1/anat/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii'
+
+      - name: T1w_Y2
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-2YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y4
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-4YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y6
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-6YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y8
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-8YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y10
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-10YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii'
+    script:
+      image: python:alpine3.21
+      command: [python]
+      source: |
+        from pathlib import Path
+        import os
+        import json
+        # Recursively glob the paths of all T1w NIFTIs
+        T1s = [p for p in Path('/home/nonroot').rglob('*_T1w.nii') if p.is_file()]
+        subjid = T1s[0].name.split('_')[0]
+        T1s_str = [str(p) for p in T1s]
+        times = [p.name.split('_')[1] for p in Path('/home/nonroot').rglob('*_T1w.nii') if p.is_file()]
+
+        cmdstring = " ".join(['--tid', subjid, '--t1s', *T1s_str, '--tpids', *times])
+        
+        print(cmdstring)
+        
+  - name: fastsurfer-template-creation-template
+
+    inputs:
+      parameters:
+        - name: commandstring
+
+      artifacts:
+      - name: fslicense
+        path: /opt/freesurfer/.license
+        s3:
+          key: config/fslicense
+
+      - name: T1w_Y0
+        # Container path where the output will be saved
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-baselineYear1Arm1/anat/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii'
+
+      - name: T1w_Y2
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-2YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y4
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-4YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y6
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-6YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y8
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-8YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y10
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-10YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii'
+    
+    container:
+      imagePullPolicy: Always
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
+      command: [bash, -c]
+      args: ["/fastsurfer/recon_surf/long_prepare_template.sh {{inputs.parameters.commandstring}}"]

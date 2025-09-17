@@ -1,0 +1,132 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: fastsurfer-base-template-creation-workflow-template
+  generateName: s3test-
+  namespace: argo-workflows
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::026415314835:role/argo-workflows-s3access
+spec:
+  archiveLogs: true
+  serviceAccountName: argo-workflows-s3access
+
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+  # Formatting Notes:
+  # * Underscores are not allowed in template or task names
+  # * Template names must be in lower case, task names should be camel case
+  # * DO NOT use hyphens if the object will later be referenced by jsonPath
+  #   which treats hyphens as a subtraction sign 
+
+  templates:
+  - name: fastsurfer-base-template-creation-dag-template
+
+    inputs:
+      parameters:
+        - name: sessions
+
+    dag:
+      tasks: 
+      - name: generate-fastsurfer-command-string-dagtask
+        template: generate-fastsurfer-command-string-template
+        arguments:
+          parameters:
+            - name: sessions
+              value: "{{inputs.parameters.sessions}}"
+
+      - name: fastsurfer-base-template-creation-dagtask
+        template: fastsurfer-base-template-creation-template
+        arguments:
+          parameters:
+            - name: fastsurfer-command-string
+              value: "{{tasks.generate-fastsurfer-command-string-dagtask.outputs.result}}"
+        dependencies:
+          - generate-fastsurfer-command-string-dagtask
+
+    outputs:
+      artifacts:
+        - name: base-template
+          from: "{{tasks.fastsurfer-base-template-creation-dagtask.outputs.artifacts.base-template}}"
+
+  - name: generate-fastsurfer-command-string-template
+    inputs:
+      parameters:
+        - name: sessions
+
+    script:
+      image: python:alpine3.21
+      command: [python]
+
+      source: |
+        from pathlib import Path
+        subjid = "{{workflow.parameters.subjID}}"
+        sessions = "{{inputs.parameters.sessions}}".split(" ")
+        T1s = [f'/home/nonroot/{subjid}_{session}_run-01_T1w.nii' for session in sessions]
+        cmdstring = " ".join(['--tid', subjid, '--t1s', *T1s, '--tpids', *sessions])
+        print(cmdstring)
+        
+  - name: fastsurfer-base-template-creation-template
+    inputs:
+      parameters:
+        - name: fastsurfer-command-string
+
+      artifacts:
+      - name: fslicense
+        path: /opt/freesurfer/.license
+        s3:
+          key: config/fslicense
+
+      - name: T1w_Y0
+        # Container path where the output will be saved
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-baselineYear1Arm1/anat/{{workflow.parameters.subjID}}_ses-baselineYear1Arm1_run-01_T1w.nii'
+
+      - name: T1w_Y2
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-2YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-2YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y4
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-4YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-4YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y6
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-6YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-6YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y8
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-8YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-8YearFollowUpYArm1_run-01_T1w.nii'
+
+      - name: T1w_Y10
+        path: /home/nonroot/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii
+        optional: true
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/ses-10YearFollowUpYArm1/anat/{{workflow.parameters.subjID}}_ses-10YearFollowUpYArm1_run-01_T1w.nii'
+
+    outputs:
+      artifacts:
+        - name: base-template
+          path: '/opt/freesurfer/subjects/{{workflow.parameters.subjID}}/'
+          s3:
+            key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.subjID}}-base-template.tar.gz'
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-gpu-nodepool
+
+    container:
+      imagePullPolicy: Always
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
+      command: [bash, -c]
+      args: ["/fastsurfer/recon_surf/long_prepare_template.sh {{inputs.parameters.fastsurfer-command-string}}"]

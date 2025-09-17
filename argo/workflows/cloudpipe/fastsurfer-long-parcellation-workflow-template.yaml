@@ -1,0 +1,146 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: fastsurfer-long-parcellation-workflow-template
+  namespace: argo-workflows
+spec:
+
+  retryStrategy:
+    retryPolicy: "Always"
+    limit: "2"
+
+  securityContext:
+    runAsNonRoot: true
+
+  templates:
+  - name: fastsurfer-long-parcellation-steps-template
+    inputs:
+      parameters:
+      - name: T1w_sessions
+
+    steps:
+    - - name: createargstring
+        template: createargstring-template
+        arguments:
+          parameters:
+            - name: T1w_sessions
+              value: '{{inputs.parameters.T1w_sessions}}'
+
+    - - name: fastsurfer-long-parcellation-step
+        template: fastsurfer-long-parcellation-template
+        arguments:
+          parameters:
+            - name: argstring
+              value: '{{steps.createargstring.outputs.result}}'
+            - name: T1w_sessions
+              value: '{{inputs.parameters.T1w_sessions}}'
+
+  # Per lines 311:313 of long_fastsurfer.sh, need to wrap sessions in quotes and append each incoming session with "=from-base"
+  - name: createargstring-template
+    inputs:
+      parameters:
+        - name: T1w_sessions
+
+    # In theory, it should be possible to replace all this with expr code in the fastsurfer container args. In theory...
+    script:
+      image: public.ecr.aws/docker/library/python:3-slim-bullseye
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          ephemeral-storage: 50M
+      command: [python]
+      source: |
+        import os
+        T1w_sessions = {{inputs.parameters.T1w_sessions}}
+        subjid = "{{workflow.parameters.subjID}}"
+        subjidwtmpl = str(subjid + "_template")
+        # Appending '=from-base' to all sessions except the last
+        T1w_sessions = [session + "=from-base" for session in T1w_sessions]
+        parallelruns = len(T1w_sessions)
+        numthreads = 8
+        # argstring = ' '.join(['--subjects', ' '.join([*T1w_sessions]), '--sd', '/opt/freesurfer/subjects', '--surf_only', '--fsaparc', '--edits', '--3T', '--long', f'{subjidwtmpl}', '--parallel', f'{parallelruns}', '--threads', f'{numthreads}'])
+        argstring = ' '.join(['--subjects', ' '.join([*T1w_sessions]), '--sd', '/opt/freesurfer/subjects', '--surf_only', '--fsaparc', '--edits', '--3T', '--long', f'{subjidwtmpl}', '--threads', f'{numthreads}'])
+        print(argstring)
+
+  - name: fastsurfer-long-parcellation-template
+    inputs:
+      parameters:
+        - name: argstring
+        - name: T1w_sessions
+
+      artifacts:
+      - name: fslicense
+        path: '/opt/freesurfer/.license'
+        s3:
+          key: 'config/fslicense'
+
+    outputs:
+      artifacts:
+      - name: long-template-complete
+        path: '/opt/freesurfer/subjects/{{workflow.parameters.subjID}}_template'
+        s3:
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{workflow.parameters.subjID}}-long-template-complete.tar.gz'
+
+      - name: ses-baselineYear1Arm1-templated
+        path: '/opt/freesurfer/subjects/ses-baselineYear1Arm1'
+        s3:
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/ses-baselineYear1Arm1_templated.tar.gz'
+
+      - name: ses-2YearFollowUpYArm1-templated
+        path: '/opt/freesurfer/subjects/ses-2YearFollowUpYArm1'
+        s3:
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/ses-2YearFollowUpYArm1_templated.tar.gz'
+        optional: true
+
+      - name: ses-4YearFollowUpYArm1-templated
+        path: '/opt/freesurfer/subjects/ses-4YearFollowUpYArm1'
+        s3:
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/ses-4YearFollowUpYArm1_templated.tar.gz'
+        optional: true
+
+    # Set the number of CPUs requested to 8x the number of sessions
+    # In combination with the '--parallel' argument to FastSurfer, this should facilitate faster
+    # concurrent parcellation of each session's data.
+    # See: https://github.com/argoproj/argo-workflows/blob/main/examples/pod-spec-from-previous-step.yaml
+    podSpecPatch: |
+      containers:
+        - name: main
+          resources:
+            requests:
+              cpu: '{{=len(jsonpath(inputs.parameters.T1w_sessions, "$"))*4}}'
+              # Request 12G plus another 4G for each session (a practical minimum of 16G)
+              # memory: '{{=len(jsonpath(inputs.parameters.T1w_sessions, "$"))*16}}G'
+              memory: '{{=len(jsonpath(inputs.parameters.T1w_sessions, "$"))*4 + 12}}G'
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-heavy-nodepool
+
+    initContainers:
+      - name: clear-is-running
+        image: public.ecr.aws/docker/library/alpine:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            ephemeral-storage: 300M
+        command: ["find", "/opt/freesurfer/subjects", "-name", "*IsRunning*", "-delete"]
+        mirrorVolumeMounts: true
+
+    container:
+      # deepmi/fastsurfer does NOT explicitly add a nonroot user to the image - which seems to be a requirement for containerd
+      # we'll just create a variant that does add the nonroot user (and their user directory)
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/fastsurfer:latest
+      imagePullPolicy: IfNotPresent
+
+      volumeMounts:
+        # PersistentVolumeClaim reference
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where volume will be mounted
+        mountPath: /opt/freesurfer/subjects
+        # Sub-path inside the referenced volume (instead of its root) to be mounted
+        subPath: opt/freesurfer/subjects
+
+      env:
+        - name: FS_LICENSE
+          value: /opt/freesurfer/.license
+
+      command: [bash, -c]
+      args: ["/fastsurfer/brun_fastsurfer.sh {{inputs.parameters.argstring}}"]

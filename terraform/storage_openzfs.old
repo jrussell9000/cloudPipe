@@ -1,0 +1,243 @@
+resource "aws_security_group" "fsx_openzfs" {
+  name_prefix = "${var.name}-fsx-openzfs-sg"
+  vpc_id      = module.vpc.vpc_id
+  description = "Security group allowing ingress/egress rules required for OpenZFS FSX"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_openzfs_111tcp" {
+  security_group_id = aws_security_group.fsx_openzfs.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 111
+  ip_protocol       = "tcp"
+  to_port           = 111
+  description       = "Remote procedure call for NFS"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_openzfs_111udp" {
+  security_group_id = aws_security_group.fsx_openzfs.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 111
+  ip_protocol       = "udp"
+  to_port           = 111
+  description       = "Remote procedure call for NFS"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_openzfs_2049tcp" {
+  security_group_id = aws_security_group.fsx_openzfs.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 2049
+  ip_protocol       = "tcp"
+  to_port           = 2049
+  description       = "NFS server daemon"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_openzfs_2049udp" {
+  security_group_id = aws_security_group.fsx_openzfs.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 2049
+  ip_protocol       = "udp"
+  to_port           = 2049
+  description       = "NFS server daemon"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_openzfs_20001tcp" {
+  security_group_id = aws_security_group.fsx_openzfs.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 20001
+  ip_protocol       = "tcp"
+  to_port           = 20003
+  description       = "NFS mount, status monitor, and lock daemon"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "fsx_openzfs_20001udp" {
+  security_group_id = aws_security_group.fsx_openzfs.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 20001
+  ip_protocol       = "udp"
+  to_port           = 20003
+  description       = "NFS mount, status monitor, and lock daemon"
+}
+
+resource "aws_iam_policy" "fsx_openzfs" {
+  name        = "AmazonEKSFSxOpenZFSCSIDriverFullAccess"
+  description = "IAM policy for EKS FSx OpenZFS CSI Driver Full Access"
+  policy      = <<-JSON
+    {
+      "Version" : "2012-10-17",
+      "Statement" : [
+        {
+          "Effect" : "Allow",
+          "Action" : [
+            "iam:CreateServiceLinkedRole",
+            "iam:AttachRolePolicy",
+            "iam:PutRolePolicy"
+          ],
+          "Resource" : "arn:aws:iam::*:role/aws-service-role/fsx.amazonaws.com/*"
+        },
+        {
+          "Action" : "iam:CreateServiceLinkedRole",
+          "Effect" : "Allow",
+          "Resource" : "*",
+          "Condition" : {
+            "StringLike" : {
+              "iam:AWSServiceName" : [
+                "fsx.amazonaws.com"
+              ]
+            }
+          }
+        },
+        {
+          "Effect" : "Allow",
+          "Action" : [
+            "fsx:CreateFileSystem",
+            "fsx:UpdateFileSystem",
+            "fsx:DeleteFileSystem",
+            "fsx:DescribeFileSystems",
+            "fsx:CreateVolume",
+            "fsx:DeleteVolume",
+            "fsx:DescribeVolumes",
+            "fsx:CreateSnapshot",
+            "fsx:DeleteSnapshot",
+            "fsx:DescribeSnapshots",
+            "fsx:TagResource",
+            "fsx:ListTagsForResource"
+          ],
+          "Resource" : ["*"]
+        }
+      ]
+    }
+    JSON
+}
+
+module "aws_fsx_irsa" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~>6.0"
+
+  name = "AmazonFSxOpenZFSFullAccess"
+
+  policies = {
+    fsxpolicy = aws_iam_policy.fsx_openzfs.arn
+  }
+
+  oidc_providers = {
+    main = {
+      provider_arn = module.eks.oidc_provider_arn
+      # See helm values for default service account name
+      namespace_service_accounts = ["kube-system:fsx-openzfs-csi-controller-sa"]
+    }
+  }
+}
+
+resource "helm_release" "aws_fsx_openzfs_csi_driver" {
+  name             = "aws-fsx-openzfs-csi-driver"
+  repository       = "https://kubernetes-sigs.github.io/aws-fsx-openzfs-csi-driver/"
+  chart            = "aws-fsx-openzfs-csi-driver"
+  namespace        = "kube-system"
+  create_namespace = false
+  wait             = true
+  values = [
+    <<-EOT
+    controller:
+      serviceAccount:
+        create: true
+        name: fsx-openzfs-csi-controller-sa
+        annotations:
+          eks.amazonaws.com/role-arn: ${module.aws_fsx_irsa.arn}
+    EOT
+  ]
+}
+
+
+# resource "kubectl_manifest" "fsx_filesystem_sc" {
+#   yaml_body = <<-YAML
+#     kind: StorageClass
+#     apiVersion: storage.k8s.io/v1
+#     metadata:
+#       name: fsx-sc
+#     provisioner: fsx.openzfs.csi.aws.com
+#     parameters:
+#       ResourceType: "filesystem" #REQUIRED
+#       DeploymentType: '"SINGLE_AZ_1"' #REQUIRED
+#       ThroughputCapacity: '1024' #REQUIRED
+#       SubnetIds: '["${element(module.vpc.private_subnets, 0)}"]' #REQUIRED
+#       SkipFinalBackupOnDeletion: 'true' #REQUIRED, SET ON DELETION
+#       OptionsOnDeletion: '["DELETE_CHILD_VOLUMES_AND_SNAPSHOTS"]' #SET ON DELETION
+#       # KmsKeyId: '"12345678-90ab-cdef-ghij-klmnopqrstuv"'
+#       AutomaticBackupRetentionDays: '0'
+#       CopyTagsToBackups: 'false'
+#       CopyTagsToVolumes: 'false'
+#       DailyAutomaticBackupStartTime: '"00:00"'
+#       DiskIopsConfiguration: '{"Iops": 300, "Mode": "USER_PROVISIONED"}'
+#       RootVolumeConfiguration: '{"CopyTagsToSnapshots": false, "DataCompressionType": "NONE", "NfsExports": [{"ClientConfigurations": [{"Clients": "*", "Options": ["rw","crossmnt"]}]}], "ReadOnly": false, "RecordSizeKiB": 128}'
+#       WeeklyMaintenanceStartTime: '"7:09:00"'
+#       SecurityGroupIds: '["${aws_security_group.fsx_openzfs.id}"]'
+#       Tags: '[{"Key": "OPENZFS", "Value": "OPENZFS"}]'
+#     reclaimPolicy: Delete
+#     allowVolumeExpansion: true
+#     mountOptions:
+#       - nfsvers=4.1
+#       - rsize=1048576
+#       - wsize=1048576
+#       - timeo=600
+#     YAML
+# }
+
+
+# IMPORTANT:
+# When dynamically provisioning FSx for OpenZFS volumes, the requested storage value is ignored.
+# Instead, the CSI driver uses the storageCapacityReservation and storageCapacityQuota parameters to
+# configure the storage properties of the volume. These values are defined in the storage class.
+# The value in the PVC MUST be explicitly set to 1Gi, otherwise the creation will fail.
+
+resource "aws_fsx_openzfs_file_system" "root" {
+  storage_capacity                = 40960
+  subnet_ids                      = [element(module.vpc.private_subnets, 0)]
+  deployment_type                 = "SINGLE_AZ_1"
+  throughput_capacity             = 512
+  automatic_backup_retention_days = 0
+  delete_options                  = ["DELETE_CHILD_VOLUMES_AND_SNAPSHOTS"]
+  skip_final_backup               = true
+  security_group_ids              = ["${aws_security_group.fsx_openzfs.id}"]
+}
+
+# Storageclasses cannot be updated, must be replaced
+# Code below ensures storageclass is replaced every time, regardless of updates
+# see https://stackoverflow.com/a/74944901
+resource "terraform_data" "openzfs_replacement" {
+  input = timestamp()
+}
+
+resource "kubectl_manifest" "fsx_volume_sc" {
+  yaml_body = <<-YAML
+    kind: StorageClass
+    apiVersion: storage.k8s.io/v1
+    metadata:
+      name: fsx-sc
+    provisioner: fsx.openzfs.csi.aws.com
+    parameters:
+      ResourceType: "volume"
+      ParentVolumeId: '"${aws_fsx_openzfs_file_system.root.root_volume_id}"'
+      CopyTagsToSnapshots: 'false'
+      DataCompressionType: '"NONE"'
+      NfsExports: '[{"ClientConfigurations": [{"Clients": "*", "Options": ["rw","crossmnt"]}]}]'
+      ReadOnly: 'false'
+      RecordSizeKiB: '128'
+      StorageCapacityReservationGiB: '100'
+      StorageCapacityQuotaGiB: '100'
+      Tags: '[{"Key": "OPENZFS", "Value": "OPENZFS"}]'
+      OptionsOnDeletion: '["DELETE_CHILD_VOLUMES_AND_SNAPSHOTS"]' #SET ON DELETION
+    reclaimPolicy: Delete
+    allowVolumeExpansion: false #Not supported for OpenZFS volumes
+    mountOptions:
+      - nfsvers=4.1
+      - rsize=1048576
+      - wsize=1048576
+      - timeo=600
+  YAML
+
+  lifecycle {
+    replace_triggered_by = [
+      terraform_data.openzfs_replacement
+    ]
+  }
+}

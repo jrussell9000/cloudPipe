@@ -1,0 +1,146 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: check-for-existing-outputs
+  namespace: argo-workflows
+
+spec:
+
+  templates:
+  - name: functional-tasks-per-session-inventory-template
+    securityContext:
+      runAsUser: 0
+    inputs:
+      parameters:
+        - name: subjID
+          description: "The ID of the subject to process (e.g., sub-001)"
+          value: "{{workflow.parameters.subjID}}"
+        - name: session
+          description: "The session identifier (e.g., ses-baselineYear1Arm1)"
+        - name: bucket
+          description: "The S3 bucket where the input data resides."
+          value: "abcd-working"
+
+    script:
+      image: public.ecr.aws/docker/library/python:3-slim-bullseye
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          ephemeral-storage: 50M
+      command: ["sh", "-c"]
+
+      env:
+        - name: SUBJECT_ID
+          value: "{{inputs.parameters.subjID}}"
+        - name: SESSION
+          value: "{{inputs.parameters.session}}"
+        - name: BUCKET_NAME
+          value: "{{inputs.parameters.bucket}}"
+
+      source: |
+
+        #!/bin/sh
+        # Install required Python packages quietly
+        python -m pip install -q --disable-pip-version-check --root-user-action=ignore boto3 botocore
+
+        python - <<EOF
+        import os
+        import re
+        import sys
+        import logging
+        from pathlib import PurePosixPath
+
+        try:
+            import boto3
+            from botocore.exceptions import ClientError
+        except ImportError:
+            # This check is just for safety; the pip install above should handle it.
+            # logging.error("boto3 is not installed.")
+            sys.exit(1)
+
+        # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+        def fastsurfer_output_check(bucket: str, subject_id: str, session: str):
+            s3_client = boto3.client('s3')
+            prefix = f'derivatives/fastsurfer/{subject_id}'
+
+            try:
+                # logging.info(f"Listing objects in bucket '{bucket}' with prefix '{prefix}'")
+                paginator = s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
+
+                for page in pages:
+                    if 'Contents' not in page:
+                        continue
+
+                    for obj in page.get('Contents', []):
+                        key = obj.get('Key', '')
+                        if key.endswith(('.nii', '.nii.gz')):
+                            filename = PurePosixPath(key).name
+                            match = re.search(r'task-([a-zA-Z0-9]+)', filename)
+                            if match:
+                                task_name = match.group(1)
+                                found_tasks.add(task_name)
+
+
+        def fmriprep_output_check
+
+
+
+
+        def find_tasks_in_s3(bucket: str, subject_id: str, session: str) -> set:
+            s3_client = boto3.client('s3')
+            prefix = f'inputs/{subject_id}/{session}/func/'
+            found_tasks = set()
+
+            try:
+                # logging.info(f"Listing objects in bucket '{bucket}' with prefix '{prefix}'")
+                paginator = s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
+
+                for page in pages:
+                    if 'Contents' not in page:
+                        continue
+
+                    for obj in page.get('Contents', []):
+                        key = obj.get('Key', '')
+                        if key.endswith(('.nii', '.nii.gz')):
+                            filename = PurePosixPath(key).name
+                            match = re.search(r'task-([a-zA-Z0-9]+)', filename)
+                            if match:
+                                task_name = match.group(1)
+                                found_tasks.add(task_name)
+
+            except ClientError as e:
+                # logging.error(f"An AWS error occurred: {e.response['Error']['Code']}")
+                sys.exit(1)
+            except Exception as e:
+                # logging.error(f"An unexpected error occurred: {e}")
+                sys.exit(1)
+
+            # if not found_tasks:
+                # logging.warning("No tasks found for the given subject/session.")
+
+            return found_tasks
+
+        def main():
+            subj_id = "{{workflow.parameters.subjID}}"
+            session = "{{inputs.parameters.session}}"
+            bucket_name = os.environ.get('BUCKET_NAME')
+
+            if not all([subj_id, session, bucket_name]):
+                # logging.error("Missing required environment variables.")
+                sys.exit(1)
+
+            tasks = find_tasks_in_s3(bucket_name, subj_id, session)
+            # logging.info(f"Found tasks: {tasks}")
+
+            target_tasks = {"rest", "nback"}
+            if tasks.intersection(target_tasks):
+                print("True")
+            else:
+                print("False")
+
+        if __name__ == "__main__":
+            main()
+        EOF
