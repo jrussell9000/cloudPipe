@@ -6,6 +6,20 @@ metadata:
 spec:
   template:
     serviceAccountName: argo-events-handler-sa
+    tolerations:
+    - key: "argoproj.io/backend"
+      value: "true"
+      effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: eks.amazonaws.com/nodegroup
+              operator: In
+              values:
+              - argo
+
   dependencies:
     - name: sqs-source
       eventSourceName: aws-sqs

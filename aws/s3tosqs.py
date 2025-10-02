@@ -115,5 +115,5 @@ if __name__ == '__main__':
     completed_bucket_name = 'abcd-working'
     completed_prefix = 'derivatives/xcpd/'
     sqs_queue_name = 'cloudpipe-jobqueue.fifo'
-    num_jobs = 100
+    num_jobs = 1
     send_s3_objects_to_sqs(input_bucket_name, input_prefix, completed_bucket_name, completed_prefix, sqs_queue_name, num_jobs)

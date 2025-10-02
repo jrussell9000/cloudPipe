@@ -1,0 +1,30 @@
+resource "helm_release" "aws_mountpoint_s3_csi_driver" {
+  name             = "aws-mountpoint-s3-csi-driver"
+  repository       = "https://awslabs.github.io/mountpoint-s3-csi-driver"
+  chart            = "aws-mountpoint-s3-csi-driver"
+  namespace        = "kube-system"
+  create_namespace = false
+
+  values = [
+    <<-EOT
+    controller:
+      nodeSelector:
+        eks.amazonaws.com/nodegroup: backend
+      tolerations:
+        - key: "CriticalAddonsOnly"
+          value: "true"
+          effect: "NoSchedule"
+    EOT
+
+  ]
+}
+
+module "mountpoint_s3_csi_pod_identity" {
+  source = "terraform-aws-modules/eks-pod-identity/aws"
+
+  name = "s3-csi-driver-sa"
+
+  attach_mountpoint_s3_csi_policy    = true
+  mountpoint_s3_csi_bucket_arns      = ["arn:aws:s3:::abcd-cache-storage"]
+  mountpoint_s3_csi_bucket_path_arns = ["arn:aws:s3:::abcd-cache-storage/*"]
+}

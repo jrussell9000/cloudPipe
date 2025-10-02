@@ -40,6 +40,9 @@ spec:
     inputs:
       parameters:
         - name: T1w_sessions
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-light-nodepool
     # In theory, it should be possible to replace all this with expr code in the fastsurfer container args. In theory...
     script:
       image: public.ecr.aws/docker/library/python:3-slim-bullseye

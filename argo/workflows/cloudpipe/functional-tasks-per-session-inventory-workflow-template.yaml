@@ -21,6 +21,9 @@ spec:
           description: "The S3 bucket where the input data resides."
           value: "abcd-working"
 
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-light-nodepool
+
     script:
       image: public.ecr.aws/docker/library/python:3-slim-bullseye
       imagePullPolicy: IfNotPresent

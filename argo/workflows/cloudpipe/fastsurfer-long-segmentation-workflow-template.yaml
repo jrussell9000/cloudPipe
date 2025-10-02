@@ -25,7 +25,7 @@ spec:
           parameters:
             - name: T1w_sessions
               value: '{{inputs.parameters.T1w_sessions}}'
-    
+
     - - name: fastsurfer-long-segmentation-step
         template: fastsurfer-long-segmentation-template
         arguments:
@@ -33,11 +33,13 @@ spec:
             - name: argstring
               value: '{{steps.createargstring.outputs.result}}'
 
-  # Per lines 311:313 of long_fastsurfer.sh, need to wrap sessions in quotes and append each incoming session with "=from-base" 
+  # Per lines 311:313 of long_fastsurfer.sh, need to wrap sessions in quotes and append each incoming session with "=from-base"
   - name: createargstring-template
     inputs:
       parameters:
         - name: T1w_sessions
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-light-nodepool
     # In theory, it should be possible to replace all this with expr code in the fastsurfer container args. In theory...
     script:
       image: public.ecr.aws/docker/library/python:3-slim-bullseye
@@ -57,7 +59,7 @@ spec:
         print(argstring)
 
   - name: fastsurfer-long-segmentation-template
-  
+
     inputs:
       parameters:
         - name: argstring

@@ -12,8 +12,8 @@ clusterName: ${clusterName}
 region: ${region}
 k8sMode: EKS # can be EKS | ROSA | K8S
 ## Provide default tolerations
-tolerations:
-  - operator: Exists
+# tolerations:
+#   - operator: Exists
 containerLogs:
   enabled: true
   fluentBit:
@@ -1181,7 +1181,11 @@ manager:
     requests:
       cpu: 100m
       memory: 256Mi
-  tolerations: []
+  tolerations:
+    - key: "CriticalAddonsOnly"
+      value: "true"
+      effect: "NoSchedule"
+
   ## Adds additional environment variables
   ## e.g ENV_VAR: env_value
   env:
@@ -1194,7 +1198,16 @@ manager:
   podLabels: {}
   service:
     name:
-  affinity: {}
+
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                  - backend
   nodeSelector:
     kubernetes.io/os: linux
 ## Admission webhooks make sure only requests with correctly formatted rules will get into the Operator.
@@ -1339,7 +1352,48 @@ agent:
                 source_labels:
                 - __meta_kubernetes_service_name
                 target_label: Service
+            # Job for Argo Workflows Controller
+            # Discovers and scrapes metrics from Argo Workflows controller endpoints.
+            # - Argo Workflows controller typically runs in the 'argo' namespace.
+            # - Metrics are exposed on port 9090 at /metrics.
+            # - Note: Only the leader controller instance will provide full metrics.
+            - job_name: 'argo-workflows-controller'
+              metrics_path: /metrics
+              scheme: https
+              # Default scheme. Change to 'https' if your service endpoint uses TLS.
+              tls_config:
+                ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                insecure_skip_verify: true
+              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              kubernetes_sd_configs:
+                - role: endpoints
+                  namespaces:
+                    names:
+                      - 'argo-workflows' # Adjust this if Argo Workflows is installed in a different namespace
+              relabel_configs:
+                # 1. Keep endpoints belonging to the Argo Workflows controller service.
+                # Common service names: 'workflow-controller', 'argo-workflow-controller', 'argo-server' (if it proxies/exposes controller metrics).
+                # Adjust the regex below to match your specific Argo Workflows controller service name.
+                - source_labels: [__meta_kubernetes_service_name]
+                  action: keep
+                  regex: 'argo-workflow-controller(.*)'
 
+                # 2. Keep only the endpoints that are on port 9090.
+                - source_labels: [__meta_kubernetes_endpoint_port_number]
+                  action: keep
+                  regex: '9090'
+
+                # 3. Map useful Kubernetes metadata to Prometheus labels. These can be used as dimensions in CloudWatch.
+                - source_labels: [__meta_kubernetes_namespace]
+                  target_label: Namespace
+                - source_labels: [__meta_kubernetes_pod_name]
+                  target_label: PodName
+                - source_labels: [__meta_kubernetes_service_name]
+                  target_label: ServiceName
+                # Optional: Capture all labels from the pod associated with the endpoint.
+                - action: labelmap
+                  regex: __meta_kubernetes_pod_label_(.+)
+                  replacement: pod_label_$$$1
     processors:
       filter/excludemetrics:
         metrics:
@@ -1390,7 +1444,7 @@ agent:
 
     exporters:
       prometheusremotewrite/cloudpipe:
-        endpoint:
+        endpoint: "https://aps-workspaces.us-east-2.amazonaws.com/workspaces/ws-3c9d9c35-0b98-420a-b862-d430ad8cb063/api/v1/remote_write"
         auth:
           authenticator: sigv4auth
 

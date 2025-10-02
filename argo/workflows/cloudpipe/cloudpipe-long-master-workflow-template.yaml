@@ -120,10 +120,6 @@ spec:
               - name: session
                 value: '{{item}}'
           withParam: '{{tasks.subject-data-inventory-dagtask.outputs.result}}'
-          onExit: cleanup-efs-directory
-
-        # - name: cleanup-efs-directory
-        #   template: cleanup-efs-directory-template
 
 
 
@@ -212,35 +208,22 @@ spec:
         # Should rewrite this to produce a list of tasks names (instead of true/false)
         # so we can pass it to xcpd-dagtask and eliminate the separate task inventory
         # script in that.
-        - name: functional-tasks-per-session-inventory-dagtask
+
+        - name: functional-preprocessing-dagtask
           templateRef:
-            name: functional-tasks-per-session-inventory-workflow-template
-            template: functional-tasks-per-session-inventory-template
+            name: functional-preprocessing-workflow-template
+            template: functional-preprocessing-steps-template
           arguments:
             parameters:
               - name: session
                 value: '{{inputs.parameters.session}}'
 
-        - name: fmriprep-dagtask
-          templateRef:
-            name: fmriprep-workflow-template
-            template: fmriprep-template
-          depends: functional-tasks-per-session-inventory-dagtask
-          arguments:
-            parameters:
-              - name: session
-                value: '{{inputs.parameters.session}}'
-              - name: tasks
-                value: '{{tasks.functional-tasks-per-session-inventory-dagtask.outputs.result}}'
-          # If the session includes fMRI scans (n-back or resting state), run fmriprep
-          when: "{{tasks.functional-tasks-per-session-inventory-dagtask.outputs.result}} == True"
-
-        - name: xcpd-dagtask
-          templateRef:
-            name: xcpd-postprocessing-workflow-template
-            template: xcpd-postprocessing-dag-template
-          depends: "fmriprep-dagtask.Succeeded"
-          arguments:
-            parameters:
-              - name: session
-                value: '{{inputs.parameters.session}}'
+        # - name: functional-postprocessing-dagtask
+        #   templateRef:
+        #     name: functional-postprocessing-workflow-template
+        #     template: functional-postprocessing-dag-template
+        #   depends: "functional-preprocessing-dagtask.Succeeded"
+        #   arguments:
+        #     parameters:
+        #       - name: session
+        #         value: '{{inputs.parameters.session}}'

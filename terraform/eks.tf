@@ -90,11 +90,34 @@ module "eks" {
         }
       })
     }
-    ## NEED TO MOVE THIS TO HELM
-    ## EKS ADDON doesn't seem to support adding '--kubelet-insecure-tls=true' to spec.containers.args
-    # which is necessary until we determine a better setup for certificates
     metrics-server = {
       most_recent = true
+      configuration_values = jsonencode({
+        tolerations = [
+          {
+            key    = "CriticalAddonsOnly"
+            value  = "true"
+            effect = "NoSchedule"
+          }
+        ],
+        affinity = {
+          nodeAffinity = {
+            requiredDuringSchedulingIgnoredDuringExecution = {
+              nodeSelectorTerms = [
+                {
+                  matchExpressions = [
+                    {
+                      key      = "eks.amazonaws.com/nodegroup"
+                      operator = "In"
+                      values   = ["backend"]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      })
     }
   }
 
@@ -123,7 +146,6 @@ module "eks" {
           }
         }
       }
-
       metadata_options = {
         httpPutResponseHopLimit = 2
       }
@@ -139,8 +161,16 @@ module "eks" {
         AmazonEFSCSIDriverPolicy          = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
         AmazonPrometheusRemoteWriteAccess = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
       }
-
+      # Only allow pods that request a GPU
+      taints = {
+        criticaladdons = {
+          key    = "CriticalAddonsOnly"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      }
     }
+
     # Will host the Karpenter controller
     karpenter = {
       name           = "karpenter"
@@ -152,7 +182,7 @@ module "eks" {
       desired_size = 1
 
       use_name_prefix          = false
-      iam_role_name            = "${var.name}-karpentercontroller-nodegroup-default"
+      iam_role_name            = "${var.name}-karpentercontroller-nodegroup-iam-role"
       iam_role_use_name_prefix = false
 
       labels = {
@@ -186,7 +216,43 @@ module "eks" {
         AmazonEFSCSIDriverPolicy          = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
         AmazonPrometheusRemoteWriteAccess = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
       }
+    }
 
+    argo = {
+      name           = "argo"
+      ami_type       = "AL2023_x86_64_STANDARD"
+      instance_types = ["m5a.4xlarge"]
+
+      min_size     = 1
+      max_size     = 3
+      desired_size = 1
+
+      use_name_prefix          = false
+      iam_role_name            = "${var.name}-argo-nodegroup-iam-role"
+      iam_role_use_name_prefix = false
+
+      taints = {
+        argo = {
+          key    = "argoproj.io/backend"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      }
+      metadata_options = {
+        httpPutResponseHopLimit = 2
+      }
+      iam_role_additional_policies = {
+        # Required by SSM
+        AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        # Required by Container Insights
+        CloudWatchAgentServerPolicy = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+        # Required to pull images from private ECR registries (if so desired)
+        AmazonEC2ContainerRegistryReadOnly = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+        AmazonEKSVPCResourceController     = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
+        # Required for EFS
+        AmazonEFSCSIDriverPolicy          = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
+        AmazonPrometheusRemoteWriteAccess = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
+      }
     }
 
     # The gpuoperator group will hold the GPU enabled nodes required by NVIDIA GPU Operator
@@ -202,7 +268,7 @@ module "eks" {
       desired_size = 1
 
       use_name_prefix          = false
-      iam_role_name            = "${var.name}-gpuoperator-nodegroup-default"
+      iam_role_name            = "${var.name}-gpuoperator-nodegroup-iam-role"
       iam_role_use_name_prefix = false
 
       # GPU-Operator requires a sizable root volume to hold the CUDA files
@@ -240,20 +306,6 @@ module "eks" {
         "nvidia.com/gpu.deploy.device-plugin"         = "true"
         "nvidia.com/gpu.deploy.operator-validator"    = "true"
       }
-
-      # Only allow pods that request a GPU
-      taints = {
-        hasgpu = {
-          key    = "nvidia.com/gpu"
-          value  = "true"
-          effect = "NO_SCHEDULE"
-        },
-        criticaladdons = {
-          key      = "CriticalAddonsOnly"
-          operator = "Exists"
-          effect   = "NO_SCHEDULE"
-        }
-      }
     }
   }
   # Tag the node security group for discovery by Karpenter
@@ -263,19 +315,6 @@ module "eks" {
     # (i.e. - at most, only one security group should have this tag in your account)
     "karpenter.sh/discovery" = local.name
   }
-
-  # # Define default IAM policies for the managed node groups
-
-  # iam_role_additional_policies = {
-  #   # Required by SSM
-  #   AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  #   # Required by Container Insights
-  #   CloudWatchAgentServerPolicy = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-  #   # Required to pull images from private ECR registries (if so desired)
-  #   AmazonEC2ContainerRegistryReadOnly = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  #   AmazonEKSVPCResourceController     = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
-  # }
-
 }
 
 # Tag the primary security group of the EKS cluster for discovery by Karpenter

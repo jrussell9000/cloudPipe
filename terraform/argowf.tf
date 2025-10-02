@@ -358,7 +358,7 @@ resource "kubernetes_role_v1" "argo_workflows_runner" {
 
   rule {
     api_groups = ["argoproj.io"]
-    resources  = ["workflows", "workflowtemplates"]
+    resources  = ["workflows", "workflowtemplates", "workflowtaskresults"]
     verbs      = ["*"]
   }
 
@@ -419,7 +419,6 @@ resource "helm_release" "argo_workflows_release" {
     helm_release.prometheus_crds
   ]
   name             = "argo-workflows"
-  version          = "0.45.20"
   repository       = "https://argoproj.github.io/argo-helm"
   chart            = "argo-workflows"
   namespace        = "argo-workflows"

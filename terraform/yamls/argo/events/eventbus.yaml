@@ -10,7 +10,20 @@ spec:
   #   version: 2.11.6
   nats:
     native:
-      # Optional, defaults to 3. If it is < 3, set it to 3, that is the minimal requirement.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - argo
+                      # Optional, defaults to 3. If it is < 3, set it to 3, that is the minimal requirement.
       replicas: 3
       # Optional, authen strategy, "none" or "token", defaults to "none"
       auth: token
+      tolerations:
+      - key: "argoproj.io/backend"
+        value: "true"
+        effect: "NoSchedule"

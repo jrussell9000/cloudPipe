@@ -1,0 +1,45 @@
+vpa:
+  # vpa.enabled -- If true, the vpa will be installed as a sub-chart
+  enabled: true
+  updater:
+    enabled: false
+
+# Top level restrictions for subcharts
+# tolerations:
+# - key: "CriticalAddonsOnly"
+#   value: "true"
+#   effect: "NoSchedule"
+
+# nodeSelector:
+#   eks.amazonaws.com/nodegroup: "backend"
+
+
+controller:
+  tolerations:
+  - key: "CriticalAddonsOnly"
+    value: "true"
+    effect: "NoSchedule"
+
+  nodeSelector:
+    eks.amazonaws.com/nodegroup: "backend"
+
+  rbac:
+    # controller.rbac.create -- If set to true, rbac resources will be created for the controller
+    create: true
+    # controller.rbac.enableArgoproj -- If set to true, the clusterrole will give access to argoproj.io resources
+    enableArgoproj: true
+    # controller.rbac.extraRules -- Extra rbac rules for the controller clusterrole
+    extraRules:
+      - apiGroups: ["argoproj.io"]
+        resources: ["workflows"]
+        verbs: ["get", "list", "watch"]
+
+dashboard:
+  replicaCount: 1
+  tolerations:
+  - key: "CriticalAddonsOnly"
+    value: "true"
+    effect: "NoSchedule"
+
+  nodeSelector:
+    eks.amazonaws.com/nodegroup: "backend"

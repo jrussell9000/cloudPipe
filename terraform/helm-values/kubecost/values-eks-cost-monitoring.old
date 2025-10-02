@@ -1,0 +1,64 @@
+global:
+  imageRegistry: "public.ecr.aws"
+  grafana:
+    enabled: false
+
+frontend:
+  image:
+    repository: kubecost/frontend
+
+aggregator:
+  image:
+    repository: kubecost/cost-model
+
+forecasting:
+  image:
+    repository: public.ecr.aws/kubecost/kubecost-modeling
+    tag: v0.1.28
+
+networkCosts:
+  image:
+    repository: kubecost/kubecost-network-costs
+
+clusterController:
+  image:
+    repository: kubecost/cluster-controller
+
+finops-agent:
+  image:
+    repository: kubecost/agent
+
+prometheus:
+  server:
+    tolerations:
+    - key: "CriticalAddonsOnly"
+      value: "true"
+      effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: eks.amazonaws.com/nodegroup
+              operator: In
+              values:
+              - backend
+
+serviceAccount:
+  create: true
+  name: kubecost-cost-analyzer-amp
+
+# Root level tolerations/affinities are still required
+tolerations:
+- key: "CriticalAddonsOnly"
+  value: "true"
+  effect: "NoSchedule"
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: eks.amazonaws.com/nodegroup
+          operator: In
+          values:
+          - backend

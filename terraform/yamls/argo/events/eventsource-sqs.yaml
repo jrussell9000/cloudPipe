@@ -6,6 +6,19 @@ metadata:
 spec:
   template:
     serviceAccountName: argo-events-handler-sa
+    tolerations:
+    - key: "argoproj.io/backend"
+      value: "true"
+      effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: eks.amazonaws.com/nodegroup
+              operator: In
+              values:
+              - argo
   sqs:
     sqs_argo_workflow:
       # Confusingly, this must be FALSE or else we get errors about marshaling the JSON body
@@ -19,3 +32,4 @@ spec:
       # The duration (in seconds) for which the call waits for a message to arrive in the queue before returning.
       # MUST BE > 0 AND <= 20
       waitTimeSeconds: 20
+

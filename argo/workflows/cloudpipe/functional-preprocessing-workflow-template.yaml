@@ -1,60 +1,119 @@
 apiVersion: argoproj.io/v1alpha1
-kind: Workflow
+kind: WorkflowTemplate
 metadata:
-  generateName: fmriprep-workflow-testing-
+  name: functional-preprocessing-workflow-template
   namespace: argo-workflows
 
-
 spec:
-  ##### DELETE FOR PRODUCTION #########
-  serviceAccountName: argo-workflows-runner
-  # Create the following persistent volume claim for this workflow
-  volumeClaimTemplates:
-    # Naming the volume claim after the subject ID (for tracking)
-    - metadata:
-        # "Name" should be used to reference this PVC further down the workflow
-        name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
-        # Specify a string that will be appended to the string created by generateName in the workflow metadata
-        # By introducing the random character sequence from the metadata, we create a unique PVC for each workflow
-        # run, even if it's for the same subject ID. Neat!
-        generateName: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
-      spec:
-        accessModes: [ "ReadWriteMany" ]
-        storageClassName: efs-sc
-        resources:
-          requests:
-            storage: 30Gi
-
-  arguments:
-    parameters:
-      # Workflow parameters passed from command-line (-p) are indicated by lack of an accompanying value
-      - name: ndaGUID
-      # - name: miNDARpkgID
-      # Creating new workflow parameters by modifying existing ones (using expr language)
-      - name: subjID
-        # Prepending the NDA GUID with 'sub-' per BIDS format
-        value: sub-{{workflow.parameters.ndaGUID}}
-  entrypoint: testdag
-  ######################################
   retryStrategy:
     retryPolicy: "Always"
     limit: "2"
 
   templates:
-  ##### DELETE FOR PRODUCTION #########
-  - name: testdag
-    dag:
-      tasks:
-        - name: testdagttask
-          template: fmriprep-template
-          arguments:
-            parameters:
-              - name: session
-                value: '{{item}}'
-          withItems:
-          - "ses-baselineYear1Arm1"
-          - "ses-2YearFollowUpYArm1"
-  ######################################
+  - name: functional-preprocessing-steps-template
+    inputs:
+      parameters:
+        - name: session
+    steps:
+    - - name: functional-task-inventory
+        template: functional-task-inventory-template
+        arguments:
+          parameters:
+            - name: session
+              value: '{{inputs.parameters.session}}'
+
+    - - name: fmriprep
+        template: fmriprep-template
+        arguments:
+          parameters:
+            - name: session
+              value: '{{inputs.parameters.session}}'
+        when: '{{steps.functional-task-inventory.outputs.result}} == True'
+
+  - name: functional-task-inventory-template
+    inputs:
+      parameters:
+        - name: session
+    securityContext:
+      runAsUser: 0
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-light-nodepool
+
+    script:
+      image: public.ecr.aws/docker/library/python:3-slim-bullseye
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          ephemeral-storage: 50M
+      command: ["sh", "-c"]
+
+      env:
+        - name: SUBJECT_ID
+          value: "{{workflow.parameters.subjID}}"
+        - name: SESSION
+          value: "{{inputs.parameters.session}}"
+        - name: BUCKET_NAME
+          value: "abcd-working"
+
+      source: |
+
+        #!/bin/sh
+        # Install required Python packages quietly
+        python -m pip install -q --disable-pip-version-check --root-user-action=ignore boto3 botocore
+
+        python - <<EOF
+        import os
+        import re
+        import sys
+        import logging
+        from pathlib import PurePosixPath
+
+        import boto3
+
+        def find_tasks_in_s3(bucket: str, subject_id: str, session: str) -> set:
+            s3_client = boto3.client('s3')
+            prefix = f'inputs/{subject_id}/{session}/func/'
+            found_tasks = set()
+
+            # logging.info(f"Listing objects in bucket '{bucket}' with prefix '{prefix}'")
+            paginator = s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
+
+            for page in pages:
+                if 'Contents' not in page:
+                    continue
+
+                for obj in page.get('Contents', []):
+                    key = obj.get('Key', '')
+                    if key.endswith(('.nii', '.nii.gz')):
+                        filename = PurePosixPath(key).name
+                        match = re.search(r'task-([a-zA-Z0-9]+)', filename)
+                        if match:
+                            task_name = match.group(1)
+                            found_tasks.add(task_name)
+            return found_tasks
+
+        def main():
+            subj_id = "{{workflow.parameters.subjID}}"
+            session = "{{inputs.parameters.session}}"
+            bucket_name = os.environ.get('BUCKET_NAME')
+
+            if not all([subj_id, session, bucket_name]):
+                # logging.error("Missing required environment variables.")
+                sys.exit(1)
+
+            tasks = find_tasks_in_s3(bucket_name, subj_id, session)
+            # logging.info(f"Found tasks: {tasks}")
+
+            target_tasks = {"rest", "nback"}
+            if tasks.intersection(target_tasks):
+                print("True")
+            else:
+                print("False")
+
+        if __name__ == "__main__":
+            main()
+        EOF
 
   - name: fmriprep-template
 
@@ -79,14 +138,14 @@ spec:
       # see: https://fmriprep.org/en/stable/usage.html#using-a-previous-run-of-freesurfer
       # Here we pull in a segmented, parcellated, and within-subjects template aligned anatomical for the specified session
       # However, fmriprep is expecting a directory name matching the subject ID (NOT the session), so we'll just unpack to that path.
-      - name: fastsurfer-templated-session
-              path: /data/sourcedata/freesurfer/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}
-                      s3:
-                                key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}_templated.tar.gz'
+      # - name: fastsurfer-templated-session
+      #   path: /data/sourcedata/freesurfer/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}
+      #   s3:
+      #     key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}_templated.tar.gz'
 
       # fmriprep requires fsaverage to generate cifti output
       - name: fsaverage
-        path: /fsdir/fsaverage
+        path: /data/sourcedata/freesurfer/fsaverage
         s3:
           key: 'config/fsaverage'
 
@@ -132,9 +191,14 @@ spec:
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-01_bold.json'
         optional: true
+      ### MOTION
+      - name: rest-run-1-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-01_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-01_motion.tsv'
+        optional: true
 
       ## Run-02
-      ### NIFTI
       - name: rest-run-2
         path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-02_bold.nii
         s3:
@@ -145,19 +209,27 @@ spec:
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-02_bold.json'
         optional: true
+      - name: rest-run-2-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-02_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-02_motion.tsv'
+        optional: true
 
       ## Run-03
-      ### NIFTI
       - name: rest-run-3
         path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_bold.nii
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_bold.nii'
         optional: true
-      ### JSON
       - name: rest-run-3-json
         path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_bold.json
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_bold.json'
+        optional: true
+      - name: rest-run-3-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-03_motion.tsv'
         optional: true
 
       ## Run-04
@@ -173,6 +245,11 @@ spec:
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-04_bold.json'
         optional: true
+      - name: rest-run-4-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-04_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-04_motion.tsv'
+        optional: true
 
       ## Run-05
       ### NIFTI
@@ -187,6 +264,11 @@ spec:
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-05_bold.json'
         optional: true
+      - name: rest-run-5-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-05_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-05_motion.tsv'
+        optional: true
 
       ## Run-06
       ### NIFTI
@@ -200,6 +282,11 @@ spec:
         path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-06_bold.json
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-06_bold.json'
+        optional: true
+      - name: rest-run-6-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-06_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-rest_run-06_motion.tsv'
         optional: true
 
       # N-Back (assuming a possible maximum of four runs)
@@ -219,6 +306,13 @@ spec:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_bold.json'
         optional: true
 
+      ### MOTION
+      - name: nback-run-1-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_motion.tsv'
+        optional: true
+
       ## Run-02
       ### NIFTI
       - name: nback-run-2
@@ -231,6 +325,12 @@ spec:
         path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_bold.json
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_bold.json'
+        optional: true
+      ### MOTION
+      - name: nback-run-2-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_motion.tsv'
         optional: true
 
       ## Run-03
@@ -246,6 +346,12 @@ spec:
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_bold.json'
         optional: true
+      ### MOTION
+      - name: nback-run-3-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_motion.tsv'
+        optional: true
 
       ## Run-04
       ### NIFTI
@@ -259,6 +365,12 @@ spec:
         path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_bold.json
         s3:
           key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_bold.json'
+        optional: true
+      ### MOTION
+      - name: nback-run-4-motion
+        path: /data/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_motion.tsv
+        s3:
+          key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_motion.tsv'
         optional: true
 
     outputs:
@@ -280,17 +392,15 @@ spec:
       - name: clear-is-running
         image: public.ecr.aws/docker/library/alpine:latest
         imagePullPolicy: IfNotPresent
-        command: ["find", "/fsdir", "-name", "*IsRunning*", "-delete"]
+        command: ["find", "/data/sourcedata/freesurfer", "-name", "*IsRunning*", "-delete"]
         mirrorVolumeMounts: true
 
     container:
-      # fmriprep crashes hard when its not run as root - too lazy to resolve this
       securityContext:
         runAsUser: 0
-
       # Pull from our public repository containing slightly modified fmriprep images
       image: public.ecr.aws/l9e7l1h1/cloudpipe/fmriprep:latest
-      imagePullPolicy: IfNotPresent
+      imagePullPolicy: Always
 
       # Silencing the horde of Python warnings fmriprep spits out - seriously...
       env:
@@ -328,17 +438,15 @@ spec:
         # so that the output directory is always empty at the start
         subPath: '{{inputs.parameters.session}}/fmriprep_output'
 
-        # Disabling this volume mount so that we can pull freesurfer results
-        # from S3 to this path in artifacts (above).
         # Fastsurfer subject directory
-      # - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
-      #   # fmriprep is looking for a (BIDS) subject directory (hard coded)
-      #   # We want to pass it a session directory (the proc'd anatomicals
-      #   # corresponding to the current session). So we link a subject directory
-      #   # to the previously created session directory.
-      #   mountPath: /fsdir/{{workflow.parameters.subjID}}
-      #   # Sub-path inside the referenced volume (instead of its root) to be mounted
-      #   subPath: '{{inputs.parameters.session}}/sourcedata/freesurfer'
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # fmriprep is looking for a (BIDS) subject directory (hard coded)
+        # We want to pass it a session directory (the proc'd anatomicals
+        # corresponding to the current session). So we link a subject directory
+        # to the previously created session directory.
+        mountPath: /fsdir/{{workflow.parameters.subjID}}
+        # Sub-path inside the referenced volume (instead of its root) to be mounted
+        subPath: '{{inputs.parameters.session}}/sourcedata/freesurfer'
 
       resources:
         requests:
@@ -352,7 +460,7 @@ spec:
         - --nprocs
         - '8'
         - --mem
-        - '32000'
+        - '16000'
         - --skip-bids-validation
         - --notrack
         - --fs-license-file
@@ -381,3 +489,4 @@ spec:
         - /data
         - /fmriprep_output
         - participant
+

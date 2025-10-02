@@ -1,0 +1,835 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  namespace: argo-workflows
+  name: functional-postprocessing-workflow-template
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::575108944090:role/argo-workflows-runner
+
+spec:
+
+  # REMOVE FOR PRODUCTION #
+  # arguments:
+  #   parameters:
+  #     # Workflow parameters passed from command-line (-p) are indicated by lack of an accompanying value
+  #     - name: ndaGUID
+  #     # - name: miNDARpkgID
+  #     # Creating new workflow parameters by modifying existing ones (using expr language)
+  #     - name: subjID
+  #       # Prepending the NDA GUID with 'sub-' per BIDS format
+  #       value: sub-{{workflow.parameters.ndaGUID}}
+  #     - name: session
+
+  # entrypoint: xcpd-postprocessing-dag-template
+  # serviceAccountName: argo-workflows-runner
+  # # Create the following persistent volume claim for this workflow
+  # volumeClaimTemplates:
+  #   # Naming the volume claim after the subject ID (for tracking)
+  #   - metadata:
+  #       # "Name" should be used to reference this PVC further down the workflow
+  #       name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+  #       # Specify a string that will be appended to the string created by generateName in the workflow metadata
+  #       # By introducing the random character sequence from the metadata, we create a unique PVC for each workflow
+  #       # run, even if it's for the same subject ID. Neat!
+  #       generateName: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+  #     spec:
+  #       accessModes: [ "ReadWriteMany" ]
+  #       storageClassName: efs-sc
+  #       resources:
+  #         requests:
+  #         # see https://github.com/kubernetes-sigs/aws-fsx-openzfs-csi-driver/blob/main/examples/kubernetes/dynamic-provisioning/volume/claim.yaml
+  #         # When dynamically provisioning FSx for OpenZFS volumes, the requested storage value is ignored.
+  #         # Instead, the CSI driver uses the storageCapacityReservation and storageCapacityQuota parameters to
+  #         # configure the storage properties of the volume. These values are defined in the storage class.
+  #         # The value below MUST be explicitly set to 1Gi, otherwise the creation will fail.
+  #           storage: 50Gi
+  #####
+
+  templates:
+
+  - name: functional-postprocessing-dag-template
+    inputs:
+      parameters:
+        - name: session
+        # # REMOVE FOR PRODUCTION
+        #   value: workflow.parameters.session
+        # ###
+    dag:
+      tasks:
+        - name: functional-task-inventory-dagtask
+          template: functional-task-inventory-template
+          arguments:
+            parameters:
+              - name: session
+                value: "{{inputs.parameters.session}}"
+
+        - name: xcpd-postprocessing-dagtask
+          template: xcpd-postprocessing-template
+          arguments:
+            parameters:
+              - name: session
+                value: "{{inputs.parameters.session}}"
+              - name: task
+                value: "{{item}}"
+          withParam: "{{tasks.functional-task-inventory-dagtask.outputs.result}}"
+          dependencies:
+            - functional-task-inventory-dagtask
+
+  - name: functional-task-inventory-template
+    inputs:
+      parameters:
+        - name: session
+      ### REMOVE FOR PRODUCTION
+      # artifacts:
+      #   - name: funcpreproc
+      #     path: "/fmriprep_output/{{workflow.parameters.subjID}}"
+      #     s3:
+      #       key: 'derivatives/fmriprep/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/fmriprep-output.tar.gz'
+      #   - name: dataset-description
+      #     path: /fmriprep_output/dataset_description.json
+      #     s3:
+      #       key: 'config/dataset_description.json'
+      ###
+    script:
+      volumeMounts:
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        mountPath: /fmriprep_output
+        subPath: '{{inputs.parameters.session}}/fmriprep_output'
+      image: public.ecr.aws/docker/library/python:3-slim-bullseye
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          ephemeral-storage: 50M
+      command: [python]
+      source: |
+        from pathlib import Path
+        import json
+        tasks = list(set([file.name.split('_')[2].split('-')[1] for file in Path(f'/fmriprep_output/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func').glob('*')]))
+        print(json.dumps(tasks))
+
+  - name: xcpd-postprocessing-template
+    inputs:
+      parameters:
+        - name: session
+        - name: task
+
+    dag:
+      tasks:
+        - name: xcpd-rest-postprocessing-dagtask
+          template: xcpd-rest-postprocessing-template
+          when: "{{inputs.parameters.task}} == rest"
+          arguments:
+            parameters:
+              - name: session
+                value: "{{inputs.parameters.session}}"
+              - name: task
+                value: "{{inputs.parameters.task}}"
+
+        - name: xcpd-nback-postprocessing-dagtask
+          template: xcpd-nback-postprocessing-dag-template
+          when: "{{inputs.parameters.task}} == nback"
+          arguments:
+            parameters:
+              - name: session
+                value: "{{inputs.parameters.session}}"
+              - name: task
+                value: "{{inputs.parameters.task}}"
+
+
+  - name: xcpd-rest-postprocessing-template
+    inputs:
+      parameters:
+        - name: session
+        - name: task
+
+    outputs:
+      artifacts:
+      - name: xcpd-output
+        path: "/xcpd_output/{{workflow.parameters.subjID}}"
+        s3:
+          endpoint: s3-accelerate.amazonaws.com
+          bucket: 'abcd-working'
+          key: 'derivatives/xcpd/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/{{inputs.parameters.task}}-xcpd-output.tar.gz'
+          region: us-east-2
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-heavy-nodepool
+
+    container:
+      securityContext:
+        runAsUser: 0
+
+      image: pennlinc/xcp_d:latest
+      imagePullPolicy: IfNotPresent
+
+      volumeMounts:
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          mountPath: /fmriprep_output
+          subPath: '{{inputs.parameters.session}}/fmriprep_output'
+
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          mountPath: /xcpd_output
+          subPath: '{{inputs.parameters.session}}/xcpd_output'
+
+      resources:
+        requests:
+          memory: 16G
+          cpu: '8'
+
+      args:
+        - '--mode'
+        - 'none'
+        - '--participant-label'
+        - '{{workflow.parameters.ndaGUID}}'
+        - '--session-id'
+        - '{{inputs.parameters.session}}'
+        - '--task-id'
+        - '{{inputs.parameters.task}}'
+        - '--nprocs'
+        - '8'
+        - '--input-type'
+        - 'fmriprep'
+        - '--file-format'
+        - 'cifti'
+        - '--dummy-scans'
+        - 'auto'
+        - '--despike'
+        - 'y'
+        # Per discussion with RB,
+        - '--nuisance-regressors'
+        - 'none'
+        - '--smoothing'
+        - '0' # see https://onlinelibrary.wiley.com/doi/10.1111/ejn.13717 which recommends against smoothing for graph theory analyses
+        - '--combine-runs'
+        - 'y'
+        - '--motion-filter-type'
+        - 'lp'
+        - '--band-stop-min'
+        - '12' # breaths per minute (0.2Hz) - lowest rate in range of values from 9-18 yrs (see: https://doi.org/10.1016/S0140-6736(10)62226-X)
+        - '--motion-filter-order'
+        - '4' # default when motion-filter-type is set to 'lp'
+        - '--fd-thresh'
+        - '0.3'
+        - '--output-type'
+        - 'censored'
+        - '--lower-bpf'
+        - '0.01' # default
+        - '--upper-bpf'
+        - '0.1' # default
+        - '--atlases'
+        - '4S556Parcels' # Need Schaefer 400 + Tian
+        - 'Gordon'
+        - '--min-coverage'
+        - '0.5'
+        # see: https://xcp-d.readthedocs.io/en/latest/workflows.html#abcd-mode
+        #- '--create-matrices' # Creates matrices from a random subsample of volumes
+        - '--random-seed'
+        - '52618'
+        - '--linc-qc'
+        - 'y'
+        - '--abcc-qc'
+        - 'y'
+        - '--report-output-level'
+        - 'session'
+        - '--clean-workdir'
+        - '--notrack'
+        - '--warp-surfaces-native2std'
+        - 'y'
+        - '/fmriprep_output/'
+        - '/xcpd_output/'
+        - 'participant'
+
+  - name: xcpd-nback-postprocessing-dag-template
+    inputs:
+      parameters:
+        - name: session
+        - name: task
+    dag:
+      tasks:
+        - name: concatenation-dagtask
+          template: concatenation-template
+          arguments:
+            parameters:
+              - name: session
+                value: '{{inputs.parameters.session}}'
+              - name: task
+                value: '{{inputs.parameters.task}}'
+
+        - name: replace-motion-parameters-dagtask
+          template: replace-motion-parameters-template
+          arguments:
+            parameters:
+              - name: session
+                value: '{{inputs.parameters.session}}'
+              - name: task
+                value: '{{inputs.parameters.task}}'
+
+        - name: generating-task-regressors-dagtask
+          template: generating-task-regressors-template
+          arguments:
+            parameters:
+              - name: session
+                value: '{{inputs.parameters.session}}'
+              - name: task
+                value: '{{inputs.parameters.task}}'
+          dependencies:
+            - concatenation-dagtask
+
+        - name: xcpd-nback-activation-postprocessing-dagtask
+          template: xcpd-nback-activation-postprocessing-template
+          arguments:
+            parameters:
+              - name: session
+                value: '{{inputs.parameters.session}}'
+              - name: task
+                value: '{{inputs.parameters.task}}'
+          dependencies:
+            - generating-task-regressors-dagtask
+
+        - name: xcpd-nback-connectivity-postprocessing-dagtask
+          template: xcpd-nback-connectivity-postprocessing-template
+          arguments:
+            parameters:
+              - name: session
+                value: '{{inputs.parameters.session}}'
+              - name: task
+                value: '{{inputs.parameters.task}}'
+
+  - name: concatenation-template
+    inputs:
+      parameters:
+        - name: session
+        - name: task
+      artifacts:
+        - name: nback-timing-run1
+          path: "/xcpd_input/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/nback_event_timings/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_events.tsv"
+          s3:
+            key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-01_events.tsv'
+
+        - name: nback-timing-run2
+          path: "/xcpd_input/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/nback_event_timings/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_events.tsv"
+          s3:
+            key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-02_events.tsv'
+          optional: true
+
+        - name: nback-timing-run3
+          path: "/xcpd_input/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/nback_event_timings/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_events.tsv"
+          s3:
+            key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-03_events.tsv'
+          optional: true
+
+        - name: nback-timing-run4
+          path: "/xcpd_input/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/nback_event_timings/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_events.tsv"
+          s3:
+            key: 'inputs/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-nback_run-04_events.tsv'
+          optional: true
+
+        - name: nback_custom_confounds_config
+          path: "/xcpd_input/custom_confounds/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.task}}_custom_confounds_config.yaml"
+          s3:
+            key: "config/nback_custom_confounds_config.yaml"
+
+        - name: dataset-description
+          path: "/fmriprep_output/dataset_description.json"
+          s3:
+            key: "config/dataset_description.json"
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-light-heavy-nodepool
+
+    script:
+      volumeMounts:
+          # fmriprep base directory
+          # PersistentVolumeClaim reference
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /fmriprep_output
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/fmriprep_output'
+
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /xcpd_output
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/xcpd_output'
+
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /xcpd_input
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/xcpd_input'
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/bravepy:latest
+      imagePullPolicy: IfNotPresent
+      command: [python]
+      source: |
+          import nibabel as nib
+          import pandas as pd
+          from pathlib import Path
+
+          # Setting paths and creating lists
+          taskImagesPath = Path("/fmriprep_output/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func")
+          eventTimingsPath = Path("/xcpd_input/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.task}}_event_timings")
+          taskImagesList = sorted(list([niigz for niigz in taskImagesPath.glob('*task-{{inputs.parameters.task}}_run-0*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz')]))
+          timingFilesList = sorted(list([file for file in eventTimingsPath.glob('*_task-{{inputs.parameters.task}}_run-0*_events.tsv')]))
+          run_base = '{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-{{inputs.parameters.task}}'
+
+          # Error checking
+          if len(taskImagesList) != len(timingFilesList):
+            print('The number of event timing files for {{inputs.parameters.task}} does not match the number of NIFTI files. Exiting with error.')
+            sys.exit(1)
+          else:
+            n_runs = len(niis)
+
+          # Getting run durations
+          run_durations = []
+          for i in range(1, n_runs + 1):
+            run_niigz = taskImagesPath / "_".join([run_base, f"run-0{i}", "space-MNI152NLin2009cAsym_desc-preproc", "bold.nii.gz"])
+            img = nib.load(run_niigz)
+
+            if img.ndim < 4:
+              print(f"Error: Expected a 4D image, but got {img.ndim} dimensions.", file=sys.stderr)
+              sys.exit(1)
+
+            numTRs = img.shape[-1]
+            tr_length = img.header.get_zooms()[-1]
+
+            if tr_value > 100:
+              tr_seconds = tr_value / 1000.0
+            else:
+              tr_seconds = tr_value
+
+            total_time_seconds = numTRs * tr_seconds
+
+            run_durations[i] = total_time_seconds
+
+          # Concatenating timing files
+          if len(timingFilesList) != len(run_durations):
+            print("Error: The number of items in 'input_files' must match the number in 'run_durations'.", file=sys.stderr)
+            sys.exit(1)
+
+          all_run_data = []
+          cumulative_offset = 0.0
+
+          for i, file_path in enumerate(timingFilesList):
+            # Grab the duration of the current run
+            run_duration = run_durations[i]
+            # Read in the tab-delimited timing file
+            df = pd.read_csv(
+              file_path,
+              sep='\t',
+              header=0,
+              names = ['onset', 'duration', 'trial_type']
+              engine='python'
+            }
+
+            # !!!!!!!!!!!!!!
+            # Change to onset, duration, condition for column names
+            # !!!!!!!!!!!!!!
+
+            # Add the cumulative_offset to each of the onset values
+            df['onset'] = df['onset'] + cumulative_offset
+            # Add this data frame to an 'all_run_data' list
+            all_run_data.append(df)
+            # Add the current run_duration to the cumulative offset to modify the next run
+            cumulative_offset += run_duration
+
+          concatenated_df = pd.concat(all_run_data, ignore_index=True)
+          concatenated_df_out = Path(eventTimingsPath, "_".join([run_base, "events.tsv"]))
+
+          concatenated_df.to_csv(
+            concatenated_df_out,
+            sep='\t',
+            header=False,
+            index=False,
+            float_format='%.4f'
+            )
+
+          # Concatenating images
+          concatenated_images = nib.funcs.concate_images(taskImageList)
+          concatenated_images_out = Path(taskImagesPath, "_".join([run_base, "space-MNI152NLin2009cAsym", "desc-preproc", "bold.nii.gz"]))
+          nib.save(concatenated_images, concatenated_images_out)
+
+  - name: replace-motion-parameters-template
+    inputs:
+      parameters:
+      - name: session
+      - name: task
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-light-nodepool
+    script:
+      volumeMounts:
+          # fmriprep base directory
+          # PersistentVolumeClaim reference
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /fmriprep_output
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/fmriprep_output'
+
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /xcpd_output
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/xcpd_output'
+
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /xcpd_input
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/xcpd_input'
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/bravepy:latest
+      imagePullPolicy: IfNotPresent
+      command: [python]
+      source: |
+        import numpy
+        import json
+        import os
+        import sys
+
+  - name: generating-task-regressors-template
+    inputs:
+      parameters:
+      - name: session
+      - name: task
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-light-nodepool
+    script:
+      volumeMounts:
+          # fmriprep base directory
+          # PersistentVolumeClaim reference
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /fmriprep_output
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/fmriprep_output'
+
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /xcpd_output
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/xcpd_output'
+
+        - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+          # Path inside the container where the volume will be mounted
+          mountPath: /xcpd_input
+          # Volume path to which we're linking (no starting '/')
+          # Name the directory after the session so that the
+          # fmriprep directory on the container is always empty at the start
+          subPath: '{{inputs.parameters.session}}/xcpd_input'
+      image: public.ecr.aws/l9e7l1h1/cloudpipe/bravepy:latest
+      imagePullPolicy: IfNotPresent
+      command: [python]
+      source: |
+        import numpy
+        import json
+        import os
+        import sys
+        import numpy as np
+        import pandas as pd
+        from pathlib import Path
+        import nibabel as nib
+        from nilearn.glm.first_level import make_first_level_design_matrix, spm_hrf
+
+        taskImagesPath = Path("/fmriprep_output/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func")
+        eventTimingsPath = Path("/xcpd_input/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.task}}_event_timings")
+        run_base = '{{workflow.parameters.subjID}}_{{inputs.parameters.session}}_task-{{inputs.parameters.task}}'
+        confoundsPath = Path("/xcpd_input/custom_confounds/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/")
+
+        # Read in the concatenated image and timing files generated by concatenation-template
+        niigz = taskImagesPath / "_".join([run_base, "space-MNI152NLin2009cAsym", "desc-preproc", "bold.nii.gz"])
+        timingFile = eventTimingsPath / "_".join([run_base, "events.tsv"])
+
+        # Generate an array of TR-onset times
+        img = nib.load(niigz)
+        TR = img.header.pixdim[4]
+        nvols = run_img.shape[3]
+        frameTimes = np.arange(nvols) * TR
+
+        # Read in the event timing file
+        eventTimings_df = pd.read_csv(timingFile, sep='\t', usecols=range(0, 3))
+
+        # Per Hagler et al., 2019, 2.7.3...
+        # HRFs modeled with two-parameter gamma basis fxn plus temporal derivative
+        # Task models include stim timing for each condition and linear contrasts of conditiosn
+        # For EN-Back, duration of cues (~3s) and trial blocks (~24s) are modeled as square waves
+        # convolved with the two-param gamma basis function (i.e., block duration specified when using
+        # AFNI's 'SPMG' option)
+
+        run_task_confounds = make_first_level_design_matrix(
+          frame_times=frameTimes,
+          events=eventTimings_df,
+          hrf_model="spm + derivative",
+          drift_model="cosine",
+          add_regs=None
+        )
+
+        run_task_confounds = run_task_confounds.drop(columns='constant')
+        run_task_confounds.to_csv(Path(confoundsPath / "_".join([run_base, "desc-confounds", "timeseries.tsv"])))
+
+        # Include a dataset_description.json file
+        with open("/xcpd_input/custom_confounds/dataset_description.json", "w") as fo:
+          json.dump(
+            {
+              "Name": "NBack Custom Confounds",
+              "BIDSVersion": "1.6.0",
+              "DatasetType": "derivative",
+              "GeneratedBy": [
+                {
+                  "Name": "Cloudpipe"
+                }
+              ]
+            },
+            fo,
+          )
+
+  - name: xcpd-nback-activation-postprocessing-template
+    inputs:
+      parameters:
+        - name: session
+        - name: task
+
+    outputs:
+      artifacts:
+      - name: xcpd-output
+        path: "/xcpd_output/{{workflow.parameters.subjID}}"
+        s3:
+          endpoint: s3-accelerate.amazonaws.com
+          bucket: 'abcd-working'
+          key: 'derivatives/xcpd/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/{{inputs.parameters.task}}-xcpd-activation-output.tar.gz'
+          region: us-east-2
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-heavy-nodepool
+
+    container:
+      securityContext:
+        runAsUser: 0
+
+      image: pennlinc/xcp_d:latest
+      imagePullPolicy: IfNotPresent
+
+      volumeMounts:
+        # fmriprep base directory
+        # PersistentVolumeClaim reference
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where the volume will be mounted
+        mountPath: /fmriprep_output
+        # Volume path to which we're linking (no starting '/')
+        # Name the directory after the session so that the
+        # fmriprep directory on the container is always empty at the start
+        subPath: '{{inputs.parameters.session}}/fmriprep_output'
+
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where the volume will be mounted
+        mountPath: /xcpd_output
+        # Volume path to which we're linking (no starting '/')
+        # Name the directory after the session so that the
+        # fmriprep directory on the container is always empty at the start
+        subPath: '{{inputs.parameters.session}}/xcpd_output'
+
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where the volume will be mounted
+        mountPath: /xcpd_input
+        # Volume path to which we're linking (no starting '/')
+        # Name the directory after the session so that the
+        # fmriprep directory on the container is always empty at the start
+        subPath: '{{inputs.parameters.session}}/xcpd_input'
+
+      resources:
+        requests:
+          memory: 16G
+          cpu: '8'
+
+      args:
+      - '--mode'
+      - 'none'
+      - '--participant-label'
+      - '{{workflow.parameters.ndaGUID}}'
+      - '--session-id'
+      - '{{inputs.parameters.session}}'
+      - '--task-id'
+      - '{{inputs.parameters.task}}'
+      - '--nprocs'
+      - '8'
+      - '--input-type'
+      - 'fmriprep'
+      - '--file-format'
+      - 'cifti'
+      - '--dummy-scans'
+      - 'auto'
+      - '--despike'
+      - 'y'
+      - '--datasets'
+      - 'nback_custom=/xcpd_input/custom_confounds'
+      - '--nuisance-regressors'
+      - '/xcpd_input/custom_confounds/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/func/{{inputs.parameters.task}}_custom_confounds_config.yaml'
+      - '--smoothing'
+      - '0' # see https://onlinelibrary.wiley.com/doi/10.1111/ejn.13717 which recommends against smoothing for graph theory analyses
+      - '--combine-runs'
+      - 'y'
+      - '--motion-filter-type'
+      - 'lp'
+      - '--band-stop-min'
+      - '12' # breaths per minute (0.2Hz) - lowest rate in range of values from 9-18 yrs (see: https://doi.org/10.1016/S0140-6736(10)62226-X)
+      - '--motion-filter-order'
+      - '4' # default when motion-filter-type is set to 'lp'
+      - '--fd-thresh'
+      - '0.9' # <= 0 disables fd thresholding # Does this still allow motion info to be used in nuisance regression???
+      - '--output-type'
+      - 'censored'
+      - '--lower-bpf'
+      - '0.01' # default
+      # VERIFY
+      # - '--upper-bpf'
+      # - '0.1' # default
+      - '--skip-parcellation' # Per TJK, we can do this later and save space by not doing it now.
+      - '--min-coverage'
+      - '0.5'
+      - '--random-seed'
+      - '52618'
+      - '--linc-qc'
+      - 'y'
+      - '--abcc-qc'
+      - 'y'
+      - '--report-output-level'
+      - 'session'
+      - '--clean-workdir'
+      - '--notrack'
+      - '--warp-surfaces-native2std'
+      - 'y'
+      - '/fmriprep_output/'
+      - '/xcpd_output/'
+      - 'participant'
+
+  - name: xcpd-nback-connectivity-postprocessing-template
+    inputs:
+      parameters:
+        - name: session
+        - name: task
+
+    outputs:
+      artifacts:
+      - name: xcpd-output
+        path: "/xcpd_output/{{workflow.parameters.subjID}}"
+        s3:
+          endpoint: s3-accelerate.amazonaws.com
+          bucket: 'abcd-working'
+          key: 'derivatives/xcpd/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}/{{inputs.parameters.task}}-xcpd-connectivity-output.tar.gz'
+          region: us-east-2
+
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-heavy-nodepool
+
+    container:
+      securityContext:
+        runAsUser: 0
+
+      image: pennlinc/xcp_d:latest
+      imagePullPolicy: IfNotPresent
+
+      volumeMounts:
+        # fmriprep base directory
+        # PersistentVolumeClaim reference
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where the volume will be mounted
+        mountPath: /fmriprep_output
+        # Volume path to which we're linking (no starting '/')
+        # Name the directory after the session so that the
+        # fmriprep directory on the container is always empty at the start
+        subPath: '{{inputs.parameters.session}}/fmriprep_output'
+
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where the volume will be mounted
+        mountPath: /xcpd_output
+        # Volume path to which we're linking (no starting '/')
+        # Name the directory after the session so that the
+        # fmriprep directory on the container is always empty at the start
+        subPath: '{{inputs.parameters.session}}/xcpd_output'
+
+      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+        # Path inside the container where the volume will be mounted
+        mountPath: /xcpd_input
+        # Volume path to which we're linking (no starting '/')
+        # Name the directory after the session so that the
+        # fmriprep directory on the container is always empty at the start
+        subPath: '{{inputs.parameters.session}}/xcpd_input'
+
+      resources:
+        requests:
+          memory: 16G
+          cpu: '8'
+
+      args:
+        - '--mode'
+        - 'none'
+        - '--participant-label'
+        - '{{workflow.parameters.ndaGUID}}'
+        - '--session-id'
+        - '{{inputs.parameters.session}}'
+        - '--task-id'
+        - '{{inputs.parameters.task}}'
+        - '--nprocs'
+        - '8'
+        - '--input-type'
+        - 'fmriprep'
+        - '--file-format'
+        - 'cifti'
+        - '--dummy-scans'
+        - 'auto'
+        - '--despike'
+        - 'y'
+        - '--nuisance-regressors' # No nuisance regression for connectivity per TJK
+        - 'none'
+
+        - '--smoothing'
+        - '0' # see https://onlinelibrary.wiley.com/doi/10.1111/ejn.13717 which recommends against smoothing for graph theory analyses
+        - '--motion-filter-type'
+        - 'lp'
+        # Potentially turn off
+        - '--band-stop-min'
+        - '12' # breaths per minute (0.2Hz) - lowest rate in range of values from 9-18 yrs (see: https://doi.org/10.1016/S0140-6736(10)62226-X)
+        - '--motion-filter-order'
+        - '4' # default when motion-filter-type is set to 'lp'
+        - '--fd-thresh'
+        - '0' # <= 0 disables fd thresholding
+        - '--output-type'
+        - 'censored'
+        - '--disable-bandpass-filter'
+        ### TURN THIS OFF ####
+        # - '--lower-bpf'
+        # - '0.01' # default
+        # - '--upper-bpf'
+        # - '0.08' # default
+        # Per TJK, we can do this later and save space by not doing it now.
+        - '--skip-parcellation'
+        - '--random-seed'
+        - '52618'
+        - '--linc-qc'
+        - 'y'
+        - '--abcc-qc'
+        - 'y'
+        - '--report-output-level'
+        - 'session'
+        - '--clean-workdir'
+        - '--notrack'
+        - '--warp-surfaces-native2std'
+        - 'y'
+        - '/fmriprep_output/'
+        - '/xcpd_output/'
+        - 'participant'

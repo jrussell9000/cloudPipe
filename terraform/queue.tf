@@ -21,11 +21,23 @@ resource "helm_release" "argo_events" {
   # version          = "~>2.4.0"
   create_namespace = false
   wait             = true
+  recreate_pods    = true
   values = [
     <<-EOT
+    controller:
+      nodeSelector:
+        eks.amazonaws.com/nodegroup: "argo"
+      tolerations:
+      - key: "argoproj.io/backend"
+        value: "true"
+        effect: "NoSchedule"
     webhook:
-      # -- Enable admission webhook. Applies only for cluster-wide installation
-      enabled: true
+      nodeSelector:
+        eks.amazonaws.com/nodegroup: "argo"
+      tolerations:
+      - key: "argoproj.io/backend"
+        value: "true"
+        effect: "NoSchedule"
     EOT
   ]
 
@@ -208,7 +220,7 @@ resource "kubectl_manifest" "argo-events-sensor" {
       argoworkflows_ns = var.argo_workflows_namespace
       workflow2trigger = var.argo_workflows_workflow2trigger
   })
-  depends_on = [kubernetes_cluster_role_v1.argo-events-handler,
+  depends_on = [helm_release.argo_events,
     kubernetes_role_binding_v1.argo-events-handler-argo-events,
   kubernetes_role_binding_v1.argo-events-handler-argo-workflows]
 }

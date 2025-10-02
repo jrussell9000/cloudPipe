@@ -1,0 +1,12 @@
+[workspace]
+authors = ["Justin Russell <jrussell9000@gmail.com>"]
+channels = ["conda-forge"]
+name = "cloudpipe"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+numpy = ">=2.3.3,<3"
+pandas = ">=2.3.3,<3"

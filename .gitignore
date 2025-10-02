@@ -39,3 +39,6 @@ kubecon-2024-eu-argocon/
 .vscode/
 
 keys/
+# pixi environments
+.pixi/*
+!.pixi/config.toml

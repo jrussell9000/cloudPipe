@@ -24,8 +24,11 @@ spec:
           parameters:
             - name: argstring
               value: '{{steps.createargstring.outputs.result}}'
+
   # In theory, it should be possible to replace all this with expr code in the fastsurfer container args. In theory...
   - name: createargstring-template
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-light-nodepool
     script:
       image: public.ecr.aws/docker/library/python:3-slim-bullseye
       imagePullPolicy: IfNotPresent

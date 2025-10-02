@@ -1,6 +1,6 @@
-" ~/cloudpipe/aws/.vim-session.vim:
+" ~/cloudpipe/tools/.vim-session.vim:
 " Vim session script.
-" Created by session.vim 2.13.1 on 29 September 2025 at 11:00:28.
+" Created by session.vim 2.13.1 on 20 September 2025 at 11:12:21.
 " Open this file in Vim and run :source % to restore your session.
 
 if exists('g:syntax_on') != 1 | syntax on | endif
@@ -16,7 +16,7 @@ let s:so_save = &g:so | let s:siso_save = &g:siso | setg so=0 siso=0 | setl so=-
 let v:this_session=expand("<sfile>:p")
 silent only
 silent tabonly
-cd ~/cloudpipe/aws
+cd ~/cloudpipe/tools
 if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
@@ -26,11 +26,11 @@ if &shortmess =~ 'A'
 else
   set shortmess=aoO
 endif
-badd +0 tmp.yaml
+badd +0 k8slookup.sh
 argglobal
 %argdel
-$argadd tmp.yaml
-edit tmp.yaml
+$argadd k8slookup.sh
+edit k8slookup.sh
 argglobal
 setlocal foldmethod=manual
 setlocal foldexpr=0
@@ -42,12 +42,12 @@ setlocal foldnestmax=20
 setlocal foldenable
 silent! normal! zE
 let &fdl = &fdl
-let s:l = 14 - ((13 * winheight(0) + 24) / 49)
+let s:l = 7 - ((6 * winheight(0) + 24) / 49)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 14
-normal! 039|
+keepjumps 7
+normal! 025|
 tabnext 1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
 "   silent exe 'bwipe ' . s:wipebuf

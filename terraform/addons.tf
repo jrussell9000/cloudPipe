@@ -13,7 +13,8 @@ resource "kubernetes_storage_class" "ebs_csi_encrypted_gp3_storage_class" {
   storage_provisioner    = "ebs.csi.aws.com"
   reclaim_policy         = "Delete"
   allow_volume_expansion = true
-  volume_binding_mode    = "Immediate"
+  # Kubecost requires the volume_binding_mode to be WaitForFirstConsumer when using a nodeSelector (not documented)
+  volume_binding_mode = "WaitForFirstConsumer"
   parameters = {
     fsType    = "xfs"
     encrypted = true
@@ -79,9 +80,40 @@ resource "helm_release" "external_secrets" {
   values = [
     <<-EOT
     serviceAccount:
-      name: "external-secrets-sa"
+      name: external-secrets-sa
       annotations:
-          eks.amazonaws.com/role-arn: "${module.external_secrets_irsa_role.arn}"
+        eks.amazonaws.com/role-arn: "${module.external_secrets_irsa_role.arn}"
+
+    # External secrets value file has tolerations/affinity at the root level
+    # as well as under global.  Not sure which does what so we'll set both.
+    global:
+      tolerations:
+      - key: "CriticalAddonsOnly"
+        value: "true"
+        effect: "NoSchedule"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - backend
+    tolerations:
+    - key: "CriticalAddonsOnly"
+      value: "true"
+      effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: eks.amazonaws.com/nodegroup
+              operator: In
+              values:
+              - backend
+
     EOT
   ]
 }
@@ -108,6 +140,39 @@ resource "helm_release" "aws_ebs_csi_driver" {
   create_namespace = false
   cleanup_on_fail  = true
   recreate_pods    = true
+
+  values = [
+    <<-EOT
+    controller:
+      tolerations:
+      - key: "CriticalAddonsOnly"
+        value: "true"
+        effect: "NoSchedule"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - backend
+              - key: eks.amazonaws.com/compute-type
+                operator: NotIn
+                values:
+                - fargate
+                - auto
+                - hybrid
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                  - a1.medium
+                  - a1.large
+                  - a1.xlarge
+                  - a1.2xlarge
+                  - a1.4xlarge
+    EOT
+  ]
 }
 
 module "aws_efs_csi_pod_identity" {
@@ -140,7 +205,16 @@ resource "helm_release" "aws_efs_csi_driver" {
       deleteAccessPointRootDir: true
       # see: https://github.com/kubernetes-sigs/aws-efs-csi-driver?tab=readme-ov-file#timeouts
       timeout: 60s
-    tolerations:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: eks.amazonaws.com/nodegroup
+                operator: In
+                values:
+                - backend
+      tolerations:
       - key: "CriticalAddonsOnly"
         value: "true"
         effect: "NoSchedule"
@@ -184,97 +258,206 @@ resource "helm_release" "cert-manager" {
   cleanup_on_fail  = true
 
   values = [
+    file("${path.module}/helm-values/cert-manager/values.yaml")
+  ]
+}
+
+module "aws_privateca_issuer_pod_identity" {
+  source = "terraform-aws-modules/eks-pod-identity/aws"
+
+  name = "aws-privateca-issuer"
+
+  attach_aws_privateca_issuer_policy = true
+  aws_privateca_issuer_acmca_arns    = [aws_acmpca_certificate_authority.this.arn]
+}
+
+resource "helm_release" "awspca" {
+  name             = "aws-privateca-issuer"
+  repository       = "https://cert-manager.github.io/aws-privateca-issuer"
+  chart            = "aws-privateca-issuer"
+  namespace        = "cert-manager"
+  create_namespace = false
+  values = [
     <<-EOT
-    crds:
-      enabled: true
-    extraEnv:
-      - name: AWS_REGION
-        value: ${var.region}
+    tolerations:
+    - key: "CriticalAddonsOnly"
+      value: "true"
+      effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: eks.amazonaws.com/nodegroup
+              operator: In
+              values:
+              - backend
+      EOT
+  ]
+}
+
+resource "helm_release" "cert_manager_csi" {
+  name             = "cert-manager-csi-driver"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager-csi-driver"
+  namespace        = "cert-manager"
+  create_namespace = false
+  values = [
+    <<-EOT
+    tolerations:
+    - key: "CriticalAddonsOnly"
+      value: "true"
+      effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: eks.amazonaws.com/nodegroup
+              operator: In
+              values:
+              - backend
     EOT
   ]
 }
 
+#-------------------------------
+# Associates a certificate with an AWS Certificate Manager Private Certificate Authority (ACM PCA Certificate Authority).
+# An ACM PCA Certificate Authority is unable to issue certificates until it has a certificate associated with it.
+# A root level ACM PCA Certificate Authority is able to self-sign its own root certificate.
+#-------------------------------
 
-# resource "helm_release" "awspca" {
-#   name       = "aws-privateca-issuer"
-#   repository = "https://cert-manager.github.io/aws-privateca-issuer"
-#   chart      = "aws-privateca-issuer"
-#   version    = "~>1.0"
-# }
+resource "aws_acmpca_certificate_authority" "this" {
+  type = "ROOT"
 
-# data "aws_iam_policy_document" "assume_role" {
-#   statement {
-#     effect = "Allow"
+  certificate_authority_configuration {
+    key_algorithm     = "RSA_4096"
+    signing_algorithm = "SHA512WITHRSA"
 
-#     principals {
-#       type        = "Service"
-#       identifiers = ["pods.eks.amazonaws.com"]
-#     }
+    subject {
+      common_name = "braveresearchcenter.org"
+    }
+  }
+}
 
-#     actions = [
-#       "sts:AssumeRole",
-#       "sts:TagSession"
-#     ]
-#   }
-# }
+resource "aws_acmpca_certificate" "this" {
+  certificate_authority_arn   = aws_acmpca_certificate_authority.this.arn
+  certificate_signing_request = aws_acmpca_certificate_authority.this.certificate_signing_request
+  signing_algorithm           = "SHA512WITHRSA"
 
-# resource "aws_iam_role" "kube-image-keeper" {
-#   name               = "kube-image-keeper-registry-role"
-#   assume_role_policy = data.aws_iam_policy_document.assume_role.json
-# }
+  template_arn = "arn:aws:acm-pca:::template/RootCACertificate/V1"
 
-# resource "aws_iam_role_policy_attachment" "ecr_access" {
-#   policy_arn = "arn:aws:iam::aws:policy/AmazonElasticContainerRegistryPublicFullAccess"
-#   role       = aws_iam_role.kube-image-keeper.name
-# }
+  validity {
+    type  = "YEARS"
+    value = 10
+  }
+}
 
-# resource "aws_iam_role_policy_attachment" "efs_access" {
-#   policy_arn = "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientFullAccess"
-#   role       = aws_iam_role.kube-image-keeper.name
-# }
+resource "aws_acmpca_certificate_authority_certificate" "this" {
+  certificate_authority_arn = aws_acmpca_certificate_authority.this.arn
 
-# resource "helm_release" "kube-image-keeper" {
-#   name             = "kube-image-keeper"
-#   repository       = "https://charts.enix.io"
-#   chart            = "kube-image-keeper"
-#   namespace        = "kuik-system"
-#   create_namespace = true
+  certificate       = aws_acmpca_certificate.this.certificate
+  certificate_chain = aws_acmpca_certificate.this.certificate_chain
+}
 
-#   values = [
-#     <<-EOT
-#     registry:
-#       persistence:
-#         enabled: true
-#         accessModes: 'ReadWriteMany'
-#         storageClass: nfs
-#         size: 100Gi
-#     controllers:
-#       webhook:
-#         ignoredImages:
-#           - .*cloudwatch.*
-#         ignoredNamespaces:
-#           - amazon-cloudwatch
-#     EOT
-#   ]
-# }
+#-------------------------------
+#  This resource creates a CRD of AWSPCAClusterIssuer Kind, which then represents the ACM PCA in K8
+#-------------------------------
 
-# resource "aws_eks_pod_identity_association" "kube-image-keeper-registry" {
-#   cluster_name    = module.eks.cluster_name
-#   namespace       = "kuik-system"
-#   service_account = "kube-image-keeper-registry"
-#   role_arn        = aws_iam_role.kube-image-keeper.arn
+# Using kubectl to workaround kubernetes provider issue https://github.com/hashicorp/terraform-provider-kubernetes/issues/1453
+resource "kubectl_manifest" "cluster_pca_issuer" {
+  yaml_body = yamlencode({
+    apiVersion = "awspca.cert-manager.io/v1beta1"
+    kind       = "AWSPCAClusterIssuer"
 
-#   depends_on = [helm_release.kube-image-keeper]
-# }
+    metadata = {
+      name = module.eks.cluster_name
+    }
 
-# resource "aws_eks_pod_identity_association" "kube-image-keeper-controllers" {
-#   cluster_name    = module.eks.cluster_name
-#   namespace       = "kuik-system"
-#   service_account = "kube-image-keeper-controllers"
-#   role_arn        = aws_iam_role.kube-image-keeper.arn
+    spec = {
+      arn = aws_acmpca_certificate_authority.this.arn
+      region : var.region
+    }
+  })
 
-#   depends_on = [helm_release.kube-image-keeper]
-# }
+  depends_on = [
+    helm_release.cert-manager,
+    helm_release.awspca
+  ]
+}
+
+#-------------------------------
+# This resource creates a CRD of Certificate Kind, which then represents certificate issued from ACM PCA,
+# mounted as K8 secret
+#-------------------------------
+
+# Using kubectl to workaround kubernetes provider issue https://github.com/hashicorp/terraform-provider-kubernetes/issues/1453
+resource "kubectl_manifest" "pca_certificate" {
+  yaml_body = yamlencode({
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+
+    metadata = {
+      name      = "braveresearchcenter"
+      namespace = "default"
+    }
+
+    spec = {
+      commonName = "braveresearchcenter"
+      duration   = "2160h0m0s"
+      issuerRef = {
+        group = "awspca.cert-manager.io"
+        kind  = "AWSPCAClusterIssuer"
+        name : module.eks.cluster_name
+      }
+      renewBefore = "360h0m0s"
+      secretName  = join("-", ["braveresearchcenter", "clusterissuer"]) # This is the name with which the K8 Secret will be available
+      usages = [
+        "server auth",
+        "client auth"
+      ]
+      privateKey = {
+        algorithm : "RSA"
+        size : 2048
+      }
+    }
+  })
+
+  depends_on = [
+    kubectl_manifest.cluster_pca_issuer,
+  ]
+}
+
+module "aws_load_balancer_controller_pod_identity" {
+  source = "terraform-aws-modules/eks-pod-identity/aws"
+
+  name = "aws-load-balancer-controller"
+
+  attach_aws_lb_controller_policy = true
+}
+
+resource "helm_release" "aws_load_balancer_controller" {
+  name             = "eks"
+  repository       = "https://aws.github.io/eks-charts"
+  chart            = "aws-load-balancer-controller"
+  namespace        = "kube-system"
+  create_namespace = false
+  cleanup_on_fail  = true
+
+  values = [
+    <<-EOT
+    region: ${var.region}
+    vpcId: ${module.vpc.vpc_id}
+    nodeSelector:
+      eks.amazonaws.com/nodegroup: "backend"
+    tolerations:
+    - key: "CriticalAddonsOnly"
+      value: "true"
+      effect: "NoSchedule"
+    clusterName: ${var.name}
+    EOT
+  ]
+}
 
 
 # /***********************************
@@ -291,51 +474,59 @@ resource "helm_release" "gpu_operator" {
   create_namespace = true
   atomic           = true
   cleanup_on_fail  = true
+  recreate_pods    = true
 
   values = [
-    <<-EOT
-    tolerations:
-      - key: "CriticalAddonsOnly"
-        value: "true"
-        effect: "NoSchedule"
-    EOT
-  ]
-  # Chart Customization Options:
-  # https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html#chart-customization-options
-  set = [
-    {
-      # The AL2023_x86_64_NVIDIA AMI comes prepackaged with NVIDIA drivers
-      name  = "driver.enabled"
-      value = "false"
-    },
-    {
-      name  = "toolkit.enabled"
-      value = "false"
-    },
-    {
-      name  = "mig.strategy"
-      value = "single"
-    },
-    {
-      name  = "migManager.enabled"
-      value = "true"
-    },
-    {
-      name  = "operator.runtimeClass"
-      value = "nvidia"
-    },
-    {
-      name  = "migManager.env[0].name"
-      value = "WITH_REBOOT"
-    },
-    {
-      name  = "migManager.env[0].value"
-      value = "true"
-      type  = "string"
-    },
-    {
-      name  = "migManager.default"
-      value = "all-1g.10gb"
-    }
+    file("${path.module}/helm-values/gpu-operator/values-full.yaml")
+    # <<-EOT
+    #   affinity:
+    #     nodeAffinity:
+    #       requiredDuringSchedulingIgnoredDuringExecution:
+    #         nodeSelectorTerms:
+    #         - matchExpressions:
+    #           - key: eks.amazonaws.com/nodegroup
+    #             operator: In
+    #             values:
+    #             - gpuoperator
+    # EOT
   ]
 }
+# Chart Customization Options:
+# https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html#chart-customization-options
+#   set = [
+#     {
+#       # The AL2023_x86_64_NVIDIA AMI comes prepackaged with NVIDIA drivers
+#       name  = "driver.enabled"
+#       value = "false"
+#     },
+#     {
+#       name  = "toolkit.enabled"
+#       value = "false"
+#     },
+#     {
+#       name  = "mig.strategy"
+#       value = "single"
+#     },
+#     {
+#       name  = "migManager.enabled"
+#       value = "true"
+#     },
+#     {
+#       name  = "operator.runtimeClass"
+#       value = "nvidia"
+#     },
+#     {
+#       name  = "migManager.env[0].name"
+#       value = "WITH_REBOOT"
+#     },
+#     {
+#       name  = "migManager.env[0].value"
+#       value = "true"
+#       type  = "string"
+#     },
+#     {
+#       name  = "migManager.default"
+#       value = "all-1g.10gb"
+#     }
+#   ]
+# }

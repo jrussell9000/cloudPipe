@@ -44,11 +44,18 @@ resource "helm_release" "karpenter" {
     nodeSelector:
       karpenter.sh/controller: 'true'
     tolerations:
-      - key: CriticalAddonsOnly
-        operator: Exists
-      - key: karpenter.sh/controller
-        operator: Exists
-        effect: NoSchedule
+    - key: karpenter.sh/controller
+      operator: Exists
+      effect: NoSchedule
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: eks.amazonaws.com/nodegroup
+                  operator: In
+                  values:
+                    - karpenter
     extraVolumes:
     - name: aws-iam-token
       projected:

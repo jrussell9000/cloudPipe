@@ -41,6 +41,8 @@ spec:
       parameters:
         - name: T1w_sessions
 
+    nodeSelector:
+      karpenter.sh/nodepool: al2023-intel-light-nodepool
     # In theory, it should be possible to replace all this with expr code in the fastsurfer container args. In theory...
     script:
       image: public.ecr.aws/docker/library/python:3-slim-bullseye
@@ -57,8 +59,7 @@ spec:
         # Appending '=from-base' to all sessions except the last
         T1w_sessions = [session + "=from-base" for session in T1w_sessions]
         parallelruns = len(T1w_sessions)
-        numthreads = 8
-        # argstring = ' '.join(['--subjects', ' '.join([*T1w_sessions]), '--sd', '/opt/freesurfer/subjects', '--surf_only', '--fsaparc', '--edits', '--3T', '--long', f'{subjidwtmpl}', '--parallel', f'{parallelruns}', '--threads', f'{numthreads}'])
+        numthreads = '{{=len(jsonpath(inputs.parameters.T1w_sessions, "$"))*4}}'
         argstring = ' '.join(['--subjects', ' '.join([*T1w_sessions]), '--sd', '/opt/freesurfer/subjects', '--surf_only', '--fsaparc', '--edits', '--3T', '--long', f'{subjidwtmpl}', '--threads', f'{numthreads}'])
         print(argstring)
 

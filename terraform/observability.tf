@@ -401,7 +401,7 @@ module "kubecost_pod_identity" {
 resource "helm_release" "kubecost" {
 
   name             = "kubecost"
-  repository       = "oci://public.ecr.aws/kubecost"
+  repository       = "https://kubecost.github.io/cost-analyzer/"
   chart            = "cost-analyzer"
   namespace        = "kubecost"
   create_namespace = true
@@ -410,9 +410,9 @@ resource "helm_release" "kubecost" {
   values = [
     templatefile("${path.module}/helm-values/kubecost/values-eks-cost-monitoring.yaml",
       {
-        amp_workspace_id = aws_prometheus_workspace.amp.id
         region           = var.region
         cluster_name     = var.name
+        amp_workspace_id = aws_prometheus_workspace.amp.id
       }
     )
   ]
