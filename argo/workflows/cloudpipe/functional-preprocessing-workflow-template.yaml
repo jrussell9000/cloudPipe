@@ -138,16 +138,16 @@ spec:
       # see: https://fmriprep.org/en/stable/usage.html#using-a-previous-run-of-freesurfer
       # Here we pull in a segmented, parcellated, and within-subjects template aligned anatomical for the specified session
       # However, fmriprep is expecting a directory name matching the subject ID (NOT the session), so we'll just unpack to that path.
-      # - name: fastsurfer-templated-session
-      #   path: /data/sourcedata/freesurfer/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}
-      #   s3:
-      #     key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}_templated.tar.gz'
+      - name: fastsurfer-templated-session
+        path: /data/sourcedata/freesurfer/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}
+        s3:
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}_templated.tar.gz'
 
       # fmriprep requires fsaverage to generate cifti output
-      - name: fsaverage
-        path: /data/sourcedata/freesurfer/fsaverage
-        s3:
-          key: 'config/fsaverage'
+      # - name: fsaverage
+      #   path: /data/sourcedata/freesurfer/fsaverage
+      #   s3:
+      #     key: 'config/fsaverage'
 
       #--- Anatomicals ---# (fmriprep uses these for alignment, even if pre-computed Freesurfer derivatives are passed)
       # T1w
@@ -439,14 +439,14 @@ spec:
         subPath: '{{inputs.parameters.session}}/fmriprep_output'
 
         # Fastsurfer subject directory
-      - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
-        # fmriprep is looking for a (BIDS) subject directory (hard coded)
-        # We want to pass it a session directory (the proc'd anatomicals
-        # corresponding to the current session). So we link a subject directory
-        # to the previously created session directory.
-        mountPath: /fsdir/{{workflow.parameters.subjID}}
-        # Sub-path inside the referenced volume (instead of its root) to be mounted
-        subPath: '{{inputs.parameters.session}}/sourcedata/freesurfer'
+      # - name: "sub-{{=lower(workflow.parameters.ndaGUID)}}"
+      #   # fmriprep is looking for a (BIDS) subject directory (hard coded)
+      #   # We want to pass it a session directory (the proc'd anatomicals
+      #   # corresponding to the current session). So we link a subject directory
+      #   # to the previously created session directory.
+      #   mountPath: /fsdir/{{workflow.parameters.subjID}}
+      #   # Sub-path inside the referenced volume (instead of its root) to be mounted
+      #   subPath: '{{inputs.parameters.session}}/sourcedata/freesurfer'
 
       resources:
         requests:
@@ -481,7 +481,7 @@ spec:
         - --ignore
         - fieldmaps
         - --derivatives
-        - freesurfer=/data/sourcedata
+        - freesurfer=/data/sourcedata/freesurfer
         # Include these arguments to ensure replicable outputs
         - --skull-strip-fixed-seed
         - --random-seed

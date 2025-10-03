@@ -80,9 +80,9 @@ spec:
       # Here we pull in a segmented, parcellated, and within-subjects template aligned anatomical for the specified session
       # However, fmriprep is expecting a directory name matching the subject ID (NOT the session), so we'll just unpack to that path.
       - name: fastsurfer-templated-session
-              path: /data/sourcedata/freesurfer/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}
-                      s3:
-                                key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}_templated.tar.gz'
+        path: /data/sourcedata/freesurfer/{{workflow.parameters.subjID}}_{{inputs.parameters.session}}
+        s3:
+          key: 'derivatives/fastsurfer/{{workflow.parameters.subjID}}/{{inputs.parameters.session}}_templated.tar.gz'
 
       # fmriprep requires fsaverage to generate cifti output
       - name: fsaverage
@@ -342,13 +342,13 @@ spec:
 
       resources:
         requests:
-          memory: 16G
+          memory: 32G
           cpu: '8'
         limits:
           cpu: '8'
 
       args:
-        - -vv
+        - -vvv
         - --nprocs
         - '8'
         - --mem
@@ -373,7 +373,7 @@ spec:
         - --ignore
         - fieldmaps
         - --derivatives
-        - freesurfer=/data/sourcedata
+        - freesurfer=/data/sourcedata/freesurfer
         # Include these arguments to ensure replicable outputs
         - --skull-strip-fixed-seed
         - --random-seed
