@@ -42,3 +42,6 @@ keys/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# vim files
+.vim*
